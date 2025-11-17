@@ -1,0 +1,45 @@
+services:
+  - type: web
+    name: nlistplanet-usm-api
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRE
+        value: 7d
+      - key: PLATFORM_FEE_PERCENTAGE
+        value: 2
+      - key: BOOST_PRICE
+        value: 100
+      - key: BOOST_DURATION_HOURS
+        value: 24
+      - key: MAX_COUNTER_ROUNDS
+        value: 4
+      - key: AFFILIATE_COMMISSION_PERCENTAGE
+        value: 5
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_PASSWORD
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_PHONE_NUMBER
+        sync: false
+      - key: FRONTEND_URL
+        value: https://nlistplanet-usm.vercel.app
