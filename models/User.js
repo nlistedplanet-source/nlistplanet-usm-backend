@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import bcrypt from 'bcryptjs';
+import argon2 from 'argon2';
 
 const userSchema = new mongoose.Schema({
   username: {
@@ -73,10 +73,19 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Hash password before saving
+// Hash password with Argon2id (bank-grade security)
 userSchema.pre('save', async function(next) {
   if (!this.isModified('password')) return next();
-  this.password = await bcrypt.hash(this.password, 12);
+  try {
+    this.password = await argon2.hash(this.password, {
+      type: argon2.argon2id,
+      memoryCost: 65536, // 64MB
+      timeCost: 3,
+      parallelism: 4
+    });
+  } catch (err) {
+    return next(err);
+  }
   next();
 });
 
@@ -88,9 +97,13 @@ userSchema.pre('save', function(next) {
   next();
 });
 
-// Compare password method
+// Compare password with Argon2id verification
 userSchema.methods.comparePassword = async function(candidatePassword) {
-  return await bcrypt.compare(candidatePassword, this.password);
+  try {
+    return await argon2.verify(this.password, candidatePassword);
+  } catch (err) {
+    return false;
+  }
 };
 
 // Get public profile

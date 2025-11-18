@@ -2,6 +2,8 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import { protect } from '../middleware/auth.js';
+import rateLimit from 'express-rate-limit';
+import { body, validationResult } from 'express-validator';
 
 const router = express.Router();
 
@@ -43,10 +45,91 @@ const generateToken = (id) => {
   });
 };
 
+// Auth specific rate limiter (mitigate brute force & abuse)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { success: false, message: 'Too many requests. Please try later.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// Validation chains - bank-level security (alphanumeric only - no symbols to avoid XSS warnings)
+const registerValidation = [
+  body('email').isEmail().withMessage('Valid email required').normalizeEmail().isLength({ max: 254 }),
+  body('password').isLength({ min: 12, max: 128 }).withMessage('Password must be 12-128 characters').custom(val => {
+    // Require: uppercase, lowercase, numbers (no special chars to prevent XSS warning)
+    const hasUpper = /[A-Z]/.test(val);
+    const hasLower = /[a-z]/.test(val);
+    const hasNum = /[0-9]/.test(val);
+    const hasOnlyAlphaNum = /^[a-zA-Z0-9]+$/.test(val);
+    if (!hasUpper || !hasLower || !hasNum) {
+      throw new Error('Password must include uppercase, lowercase, and numbers');
+    }
+    if (!hasOnlyAlphaNum) {
+      throw new Error('Password can only contain letters and numbers');
+    }
+    return true;
+  }),
+  body('fullName').isLength({ min: 3, max: 100 }).withMessage('Full name must be 3-100 characters').trim().escape(),
+  body('phone').matches(/^[0-9]{10}$/).withMessage('Phone must be 10 digits').trim(),
+  body('referredBy').optional().isString().trim().escape().isLength({ max: 20 })
+];
+
+const loginValidation = [
+  body('username').isString().trim().escape().isLength({ min: 1, max: 254 }).withMessage('Username or email required'),
+  body('password').isString().isLength({ min: 1, max: 128 }).withMessage('Password required')
+];
+
+// Audit logging helper - bank-level audit trail for compliance
+const logAuthEvent = (event, username, status, ip, userAgent) => {
+  const timestamp = new Date().toISOString();
+  // Sanitize inputs to prevent log injection attacks
+  const sanitizedUsername = (username?.substring(0, 50) || 'unknown').replace(/[\n\r]/g, '');
+  const sanitizedIp = (ip?.substring(0, 45) || 'unknown').replace(/[\n\r]/g, '');
+  const logEntry = {
+    timestamp,
+    event,
+    username: sanitizedUsername,
+    status,
+    ip: sanitizedIp,
+    userAgent: (userAgent?.substring(0, 100) || 'unknown').replace(/[\n\r]/g, '')
+  };
+  console.log(`[AUTH_AUDIT] ${JSON.stringify(logEntry)}`);
+};
+
+const handleValidation = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+    logAuthEvent('validation_error', req.body.username || req.body.email, 'failed', ip, req.headers['user-agent']);
+    // Generic response to prevent information disclosure
+    return res.status(400).json({ success: false, message: 'Validation failed. Please check input requirements.' });
+  }
+  next();
+};
+
 // @route   POST /api/auth/register
 // @desc    Register new user
 // @access  Public
-router.post('/register', async (req, res, next) => {
+router.post(
+  '/register',
+  authLimiter,
+  body('email').isEmail().normalizeEmail(),
+  body('password').isLength({ min: 12, max: 128 }).matches(/^[a-zA-Z0-9]+$/).withMessage('Password: 12-128 alphanumeric'),
+  body('fullName').isLength({ min: 3, max: 100 }).trim().escape(),
+  body('phone').matches(/^[0-9]{10}$/),
+  body('referredBy').optional().isString().trim().escape().isLength({ max: 20 }),
+  (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+      logAuthEvent('validation_error', req.body?.email, 'failed', ip, req.headers['user-agent']);
+      return res.status(400).json({ success: false, message: 'Invalid input format' });
+    }
+    next();
+  },
+  async (req, res, next) => {
   try {
     let { username, email, password, fullName, phone, referredBy } = req.body;
 
@@ -102,6 +185,9 @@ router.post('/register', async (req, res, next) => {
       await referrer.save();
     }
 
+    const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+    logAuthEvent('register_success', email, 'success', ip, req.headers['user-agent']);
+
     // Generate token
     const token = generateToken(user._id);
 
@@ -119,16 +205,25 @@ router.post('/register', async (req, res, next) => {
 // @route   POST /api/auth/login
 // @desc    Login user
 // @access  Public
-router.post('/login', async (req, res, next) => {
+router.post(
+  '/login',
+  authLimiter,
+  body('username').isString().trim().escape().isLength({ min: 1, max: 254 }),
+  body('password').isString().isLength({ min: 1, max: 128 }),
+  (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+      logAuthEvent('validation_error', req.body?.username, 'failed', ip, req.headers['user-agent']);
+      return res.status(400).json({ success: false, message: 'Invalid input format' });
+    }
+    next();
+  },
+  async (req, res, next) => {
   try {
     const { username, password } = req.body;
 
-    if (!username || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide username and password'
-      });
-    }
+    const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
 
     // Find user (include password for comparison)
     const user = await User.findOne({ 
@@ -139,6 +234,7 @@ router.post('/login', async (req, res, next) => {
     }).select('+password');
 
     if (!user) {
+      logAuthEvent('login_failed', username, 'user_not_found', ip, req.headers['user-agent']);
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials'
@@ -147,9 +243,10 @@ router.post('/login', async (req, res, next) => {
 
     // Check if banned
     if (user.isBanned) {
+      logAuthEvent('login_failed', username, 'account_banned', ip, req.headers['user-agent']);
       return res.status(403).json({
         success: false,
-        message: 'Your account has been banned'
+        message: 'Account suspended'
       });
     }
 
@@ -157,11 +254,14 @@ router.post('/login', async (req, res, next) => {
     const isPasswordValid = await user.comparePassword(password);
 
     if (!isPasswordValid) {
+      logAuthEvent('login_failed', username, 'invalid_password', ip, req.headers['user-agent']);
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials'
       });
     }
+
+    logAuthEvent('login_success', username, 'success', ip, req.headers['user-agent']);
 
     // Generate token
     const token = generateToken(user._id);

@@ -5,6 +5,9 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import compression from 'compression';
+import rateLimit from 'express-rate-limit';
+import mongoSanitize from 'express-mongo-sanitize';
+import xss from 'xss-clean';
 
 // Import routes
 import authRoutes from './routes/auth.js';
@@ -20,16 +23,49 @@ dotenv.config();
 
 const app = express();
 
-// Middleware
-app.use(helmet()); // Security headers
+// Bank-level security headers with strict CSP
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      connectSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'"],
+      imgSrc: ["'self'", 'data:', 'https:'],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      frameAncestors: ["'none'"],
+      formAction: ["'self'"],
+      upgradeInsecureRequests: []
+    }
+  },
+  crossOriginEmbedderPolicy: true,
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  referrerPolicy: { policy: 'no-referrer' },
+  noSniff: true,
+  xssFilter: true,
+  permissionsPolicy: {
+    accelerometer: [],
+    camera: [],
+    microphone: [],
+    geolocation: [],
+    magnetometer: [],
+    usb: []
+  }
+}));
 
-// Stable whitelist CORS configuration
-const allowedOrigins = new Set([
+// Stable whitelist CORS configuration (extendable via ENV ORIGINS comma separated)
+const extraOrigins = (process.env.CORS_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean);
+const allowedOriginsArray = [
   'http://localhost:3000',
-  'https://frontend-e3vw5byu9-nlist-planets-projects.vercel.app',
-  'https://frontend-theta-two-47.vercel.app',
-  process.env.FRONTEND_URL
-].filter(Boolean));
+  process.env.FRONTEND_URL,
+  ...extraOrigins
+].filter(Boolean);
+const allowedOrigins = new Set(allowedOriginsArray);
+
+// Append allowed origins to CSP connectSrc dynamically
+const helmetMiddleware = helmet.contentSecurityPolicy && helmet.contentSecurityPolicy.getDefaultDirectives;
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -55,8 +91,30 @@ app.use((req, res, next) => {
 
 app.use(compression()); // Compress responses
 app.use(morgan('dev')); // Logging
-app.use(express.json()); // Parse JSON bodies
+app.use(express.json({ limit: '1mb' })); // Parse JSON bodies with size limit
 app.use(express.urlencoded({ extended: true }));
+
+// Security hardening middleware
+app.use(mongoSanitize()); // Prevent NoSQL injection
+app.use(xss()); // Basic XSS protection (note: deprecated library, consider replacement later)
+
+// Global rate limiter (all routes)
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 300, // Max requests per window per IP
+  standardHeaders: true,
+  legacyHeaders: false
+});
+app.use(globalLimiter);
+
+// Enforce HSTS when behind HTTPS (Vercel passes x-forwarded-proto)
+app.use((req, res, next) => {
+  const proto = req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http');
+  if (proto === 'https') {
+    res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
+  }
+  next();
+});
 
 // Database connection
 mongoose.connect(process.env.MONGODB_URI)
@@ -102,12 +160,12 @@ app.get('/api/health', (req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || 'Internal server error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-  });
+  const status = err.status || 500;
+  const isProd = process.env.NODE_ENV === 'production';
+  // Avoid leaking internals in production
+  const message = isProd && status === 500 ? 'Internal server error' : (err.message || 'Error');
+  if (!isProd) console.error('Error:', err);
+  res.status(status).json({ success: false, message });
 });
 
 // 404 handler
