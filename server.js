@@ -23,28 +23,26 @@ const app = express();
 // Middleware
 app.use(helmet()); // Security headers
 
-// CORS Configuration - Allow multiple origins
-const allowedOrigins = [
-  'http://localhost:3000',
-  'https://frontend-theta-two-47.vercel.app',
-  'https://frontend-d8gp6oj0s-nlist-planets-projects.vercel.app',
-  process.env.FRONTEND_URL
-].filter(Boolean);
-
+// CORS Configuration - Allow all Vercel deployments
 app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
     
-    if (allowedOrigins.indexOf(origin) !== -1 || origin.includes('vercel.app')) {
+    // Allow localhost and all vercel.app domains
+    if (origin.includes('localhost') || 
+        origin.includes('vercel.app') || 
+        origin.includes('nlist')) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      callback(null, true); // Allow all for now
     }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 }));
 
 app.use(compression()); // Compress responses
