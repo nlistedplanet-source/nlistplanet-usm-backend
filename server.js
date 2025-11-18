@@ -22,10 +22,31 @@ const app = express();
 
 // Middleware
 app.use(helmet()); // Security headers
+
+// CORS Configuration - Allow multiple origins
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://frontend-theta-two-47.vercel.app',
+  'https://frontend-d8gp6oj0s-nlist-planets-projects.vercel.app',
+  process.env.FRONTEND_URL
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1 || origin.includes('vercel.app')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
 app.use(compression()); // Compress responses
 app.use(morgan('dev')); // Logging
 app.use(express.json()); // Parse JSON bodies
@@ -35,6 +56,25 @@ app.use(express.urlencoded({ extended: true }));
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ MongoDB connected successfully'))
   .catch((err) => console.error('❌ MongoDB connection error:', err));
+
+// Root route
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'UnlistedHub USM API',
+    version: '1.0.0',
+    endpoints: {
+      health: '/api/health',
+      auth: '/api/auth',
+      listings: '/api/listings',
+      notifications: '/api/notifications',
+      companies: '/api/companies',
+      transactions: '/api/transactions',
+      referrals: '/api/referrals',
+      admin: '/api/admin'
+    }
+  });
+});
 
 // Routes
 app.use('/api/auth', authRoutes);
