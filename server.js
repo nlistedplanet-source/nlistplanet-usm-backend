@@ -23,32 +23,33 @@ const app = express();
 // Middleware
 app.use(helmet()); // Security headers
 
-// CORS Configuration - relaxed for troubleshooting
+// Stable whitelist CORS configuration
+const allowedOrigins = new Set([
+  'http://localhost:3000',
+  'https://frontend-e3vw5byu9-nlist-planets-projects.vercel.app',
+  'https://frontend-theta-two-47.vercel.app',
+  process.env.FRONTEND_URL
+].filter(Boolean));
+
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, curl, Postman)
-    if (!origin) return callback(null, true);
-    // Allow any Vercel deployment + localhost
-    if (/vercel\.app$/.test(new URL(origin).hostname) || origin.includes('localhost')) {
-      return callback(null, true);
-    }
-    // Temporarily allow everything (can tighten later)
-    return callback(null, true);
+    if (!origin) return callback(null, true); // Allow non-browser tools
+    if (allowedOrigins.has(origin)) return callback(null, true);
+    return callback(new Error('CORS: Origin not allowed'));
   },
   credentials: true,
 }));
 
-// Explicit CORS / preflight headers to ensure Access-Control-Allow-Origin always present
+// Preflight handler (only for whitelisted origins)
 app.use((req, res, next) => {
-  const origin = req.headers.origin || '*';
-  res.header('Access-Control-Allow-Origin', origin);
-  res.header('Vary', 'Origin');
-  res.header('Access-Control-Allow-Credentials', 'true');
+  const origin = req.headers.origin;
+  if (origin && allowedOrigins.has(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+  }
   res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(204);
-  }
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
 
