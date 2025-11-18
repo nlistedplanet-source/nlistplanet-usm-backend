@@ -23,27 +23,34 @@ const app = express();
 // Middleware
 app.use(helmet()); // Security headers
 
-// CORS Configuration - Allow all Vercel deployments
+// CORS Configuration - relaxed for troubleshooting
 app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, Postman, etc.)
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, Postman)
     if (!origin) return callback(null, true);
-    
-    // Allow localhost and all vercel.app domains
-    if (origin.includes('localhost') || 
-        origin.includes('vercel.app') || 
-        origin.includes('nlist')) {
-      callback(null, true);
-    } else {
-      callback(null, true); // Allow all for now
+    // Allow any Vercel deployment + localhost
+    if (/vercel\.app$/.test(new URL(origin).hostname) || origin.includes('localhost')) {
+      return callback(null, true);
     }
+    // Temporarily allow everything (can tighten later)
+    return callback(null, true);
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  preflightContinue: false,
-  optionsSuccessStatus: 204
 }));
+
+// Explicit CORS / preflight headers to ensure Access-Control-Allow-Origin always present
+app.use((req, res, next) => {
+  const origin = req.headers.origin || '*';
+  res.header('Access-Control-Allow-Origin', origin);
+  res.header('Vary', 'Origin');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
+});
 
 app.use(compression()); // Compress responses
 app.use(morgan('dev')); // Logging
