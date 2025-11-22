@@ -2,14 +2,14 @@ import express from 'express';
 import Listing from '../models/Listing.js';
 import Company from '../models/Company.js';
 import Notification from '../models/Notification.js';
-import { protect } from '../middleware/auth.js';
+import { protect, optionalAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
 // @route   GET /api/listings
 // @desc    Get all active listings (marketplace)
-// @access  Public
-router.get('/', async (req, res, next) => {
+// @access  Public (with optional auth to filter own listings)
+router.get('/', optionalAuth, async (req, res, next) => {
   try {
     const { 
       type, // 'sell' or 'buy'
@@ -47,7 +47,7 @@ router.get('/', async (req, res, next) => {
       .skip(skip)
       .limit(parseInt(limit))
       .populate('userId', 'username avatar fullName')
-      .populate('companyId', 'name logo sector');
+      .populate('companyId', 'CompanyName ScripName Logo Sector name logo sector PAN ISIN CIN pan isin cin');
 
     const total = await Listing.countDocuments(query);
 
@@ -80,7 +80,7 @@ router.get('/my', protect, async (req, res, next) => {
 
     const listings = await Listing.find(query)
       .sort('-createdAt')
-      .populate('companyId', 'name logo sector');
+      .populate('companyId', 'CompanyName ScripName Logo Sector name logo sector PAN ISIN CIN pan isin cin');
 
     res.json({
       success: true,
@@ -113,7 +113,7 @@ router.post('/', protect, async (req, res, next) => {
       username: req.user.username,
       type,
       companyId,
-      companyName: company.name,
+      companyName: company.CompanyName || company.name,
       price,
       quantity,
       minLot: minLot || 1,
@@ -249,6 +249,205 @@ router.put('/:id/boost', protect, async (req, res, next) => {
     res.json({
       success: true,
       message: 'Listing boosted successfully for 24 hours'
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   PUT /api/listings/:listingId/bids/:bidId/accept
+// @desc    Accept a bid/offer
+// @access  Private (listing owner only)
+router.put('/:listingId/bids/:bidId/accept', protect, async (req, res, next) => {
+  try {
+    const listing = await Listing.findById(req.params.listingId);
+
+    if (!listing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Listing not found'
+      });
+    }
+
+    // Verify ownership
+    if (listing.userId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to accept this bid'
+      });
+    }
+
+    // Find bid in appropriate array
+    const bidArray = listing.type === 'sell' ? listing.bids : listing.offers;
+    const bid = bidArray.id(req.params.bidId);
+
+    if (!bid) {
+      return res.status(404).json({
+        success: false,
+        message: 'Bid not found'
+      });
+    }
+
+    // Update bid status
+    bid.status = 'accepted';
+    await listing.save();
+
+    // Create notification for bidder
+    await Notification.create({
+      userId: bid.userId,
+      type: 'bid_accepted',
+      title: 'Bid Accepted! 🎉',
+      message: `Your ${listing.type === 'sell' ? 'bid' : 'offer'} of ₹${bid.price} for ${bid.quantity} shares of ${listing.companyName} has been accepted!`,
+      data: {
+        listingId: listing._id,
+        bidId: bid._id,
+        amount: bid.price,
+        quantity: bid.quantity,
+        companyName: listing.companyName
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Bid accepted successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   PUT /api/listings/:listingId/bids/:bidId/reject
+// @desc    Reject a bid/offer
+// @access  Private (listing owner only)
+router.put('/:listingId/bids/:bidId/reject', protect, async (req, res, next) => {
+  try {
+    const listing = await Listing.findById(req.params.listingId);
+
+    if (!listing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Listing not found'
+      });
+    }
+
+    // Verify ownership
+    if (listing.userId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to reject this bid'
+      });
+    }
+
+    // Find bid in appropriate array
+    const bidArray = listing.type === 'sell' ? listing.bids : listing.offers;
+    const bid = bidArray.id(req.params.bidId);
+
+    if (!bid) {
+      return res.status(404).json({
+        success: false,
+        message: 'Bid not found'
+      });
+    }
+
+    // Update bid status
+    bid.status = 'rejected';
+    await listing.save();
+
+    // Create notification for bidder
+    await Notification.create({
+      userId: bid.userId,
+      type: 'bid_rejected',
+      title: 'Bid Rejected',
+      message: `Your ${listing.type === 'sell' ? 'bid' : 'offer'} of ₹${bid.price} for ${bid.quantity} shares of ${listing.companyName} has been rejected.`,
+      data: {
+        listingId: listing._id,
+        bidId: bid._id,
+        amount: bid.price,
+        quantity: bid.quantity,
+        companyName: listing.companyName
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Bid rejected successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   PUT /api/listings/:listingId/bids/:bidId/counter
+// @desc    Counter a bid/offer
+// @access  Private (listing owner only)
+router.put('/:listingId/bids/:bidId/counter', protect, async (req, res, next) => {
+  try {
+    const { price, quantity, message } = req.body;
+    const listing = await Listing.findById(req.params.listingId);
+
+    if (!listing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Listing not found'
+      });
+    }
+
+    // Verify ownership
+    if (listing.userId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to counter this bid'
+      });
+    }
+
+    // Find bid in appropriate array
+    const bidArray = listing.type === 'sell' ? listing.bids : listing.offers;
+    const bid = bidArray.id(req.params.bidId);
+
+    if (!bid) {
+      return res.status(404).json({
+        success: false,
+        message: 'Bid not found'
+      });
+    }
+
+    // Add to counter history
+    const round = (bid.counterHistory?.length || 0) + 1;
+    bid.counterHistory.push({
+      round,
+      by: 'seller',
+      price,
+      quantity: quantity || bid.quantity,
+      message: message || '',
+      timestamp: new Date()
+    });
+
+    // Update bid status
+    bid.status = 'countered';
+    bid.price = price;
+    if (quantity) bid.quantity = quantity;
+    
+    await listing.save();
+
+    // Create notification for bidder
+    await Notification.create({
+      userId: bid.userId,
+      type: 'bid_countered',
+      title: 'Counter Offer Received',
+      message: `Counter offer on ${listing.companyName}: ₹${price} for ${quantity || bid.quantity} shares`,
+      data: {
+        listingId: listing._id,
+        bidId: bid._id,
+        amount: price,
+        quantity: quantity || bid.quantity,
+        companyName: listing.companyName,
+        round
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Counter offer sent successfully'
     });
   } catch (error) {
     next(error);
