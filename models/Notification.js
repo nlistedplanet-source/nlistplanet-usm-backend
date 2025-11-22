@@ -15,6 +15,7 @@ const notificationSchema = new mongoose.Schema({
       'offer_accepted',
       'bid_rejected',
       'offer_rejected',
+      'bid_countered',
       'counter_offer',
       'listing_expired',
       'boost_activated',
