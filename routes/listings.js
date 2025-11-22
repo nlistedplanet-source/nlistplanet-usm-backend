@@ -91,6 +91,93 @@ router.get('/my', protect, async (req, res, next) => {
   }
 });
 
+// @route   GET /api/listings/my-placed-bids
+// @desc    Get bids/offers that current user placed on others' listings
+// @access  Private
+router.get('/my-placed-bids', protect, async (req, res, next) => {
+  try {
+    // Find all listings where current user has placed a bid or offer
+    const listings = await Listing.find({
+      $or: [
+        { 'bids.userId': req.user._id },
+        { 'offers.userId': req.user._id }
+      ]
+    })
+      .sort('-createdAt')
+      .populate('userId', 'username avatar fullName')
+      .populate('companyId', 'CompanyName ScripName Logo Sector name logo sector PAN ISIN CIN pan isin cin');
+
+    // Extract user's bids and offers from listings
+    const myActivity = [];
+    
+    listings.forEach(listing => {
+      // Check bids array (for sell posts)
+      if (listing.bids && listing.bids.length > 0) {
+        listing.bids.forEach(bid => {
+          if (bid.userId.toString() === req.user._id.toString()) {
+            myActivity.push({
+              _id: bid._id,
+              type: 'bid',
+              listingType: listing.type,
+              listing: {
+                _id: listing._id,
+                companyName: listing.companyName,
+                companyId: listing.companyId,
+                listingPrice: listing.price,
+                listingQuantity: listing.quantity,
+                owner: listing.userId
+              },
+              price: bid.price,
+              quantity: bid.quantity,
+              message: bid.message,
+              status: bid.status,
+              counterHistory: bid.counterHistory,
+              createdAt: bid.createdAt
+            });
+          }
+        });
+      }
+      
+      // Check offers array (for buy posts)
+      if (listing.offers && listing.offers.length > 0) {
+        listing.offers.forEach(offer => {
+          if (offer.userId.toString() === req.user._id.toString()) {
+            myActivity.push({
+              _id: offer._id,
+              type: 'offer',
+              listingType: listing.type,
+              listing: {
+                _id: listing._id,
+                companyName: listing.companyName,
+                companyId: listing.companyId,
+                listingPrice: listing.price,
+                listingQuantity: listing.quantity,
+                owner: listing.userId
+              },
+              price: offer.price,
+              quantity: offer.quantity,
+              message: offer.message,
+              status: offer.status,
+              counterHistory: offer.counterHistory,
+              createdAt: offer.createdAt
+            });
+          }
+        });
+      }
+    });
+
+    // Sort by creation date
+    myActivity.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    res.json({
+      success: true,
+      data: myActivity
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // @route   POST /api/listings
 // @desc    Create new listing
 // @access  Private
