@@ -541,4 +541,114 @@ router.put('/:listingId/bids/:bidId/counter', protect, async (req, res, next) =>
   }
 });
 
+// @route   PUT /api/listings/:id
+// @desc    Update/modify a listing
+// @access  Private (listing owner only)
+router.put('/:id', protect, async (req, res, next) => {
+  try {
+    const { price, quantity, minQuantity } = req.body;
+    const listing = await Listing.findById(req.params.id);
+
+    if (!listing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Listing not found'
+      });
+    }
+
+    // Verify ownership
+    if (listing.userId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to update this listing'
+      });
+    }
+
+    // Can only update active listings
+    if (listing.status !== 'active') {
+      return res.status(400).json({
+        success: false,
+        message: 'Can only update active listings'
+      });
+    }
+
+    // Update fields
+    if (price !== undefined) listing.price = price;
+    if (quantity !== undefined) listing.quantity = quantity;
+    if (minQuantity !== undefined) listing.minLot = minQuantity;
+    
+    await listing.save();
+
+    res.json({
+      success: true,
+      message: 'Listing updated successfully',
+      data: listing
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   DELETE /api/listings/:id
+// @desc    Delete a listing
+// @access  Private (listing owner only)
+router.delete('/:id', protect, async (req, res, next) => {
+  try {
+    const listing = await Listing.findById(req.params.id);
+
+    if (!listing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Listing not found'
+      });
+    }
+
+    // Verify ownership
+    if (listing.userId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to delete this listing'
+      });
+    }
+
+    // Can't delete listings with accepted bids/offers
+    const hasAcceptedBids = listing.bids?.some(bid => bid.status === 'accepted') || 
+                            listing.offers?.some(offer => offer.status === 'accepted');
+    
+    if (hasAcceptedBids) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot delete listing with accepted bids/offers. Please contact admin.'
+      });
+    }
+
+    // Send notifications to all bidders/offers
+    const bidUsers = [...(listing.bids || []), ...(listing.offers || [])].map(b => b.userId);
+    if (bidUsers.length > 0) {
+      await Notification.insertMany(
+        bidUsers.map(userId => ({
+          userId,
+          type: 'listing_cancelled',
+          title: 'Listing Cancelled',
+          message: `The listing for ${listing.companyName} has been cancelled by the seller.`,
+          data: {
+            listingId: listing._id,
+            companyName: listing.companyName
+          }
+        }))
+      );
+    }
+
+    // Delete the listing
+    await listing.deleteOne();
+
+    res.json({
+      success: true,
+      message: 'Listing deleted successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;
