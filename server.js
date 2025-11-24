@@ -80,6 +80,8 @@ app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true); // Allow non-browser tools
     if (allowedOrigins.has(origin)) return callback(null, true);
+    // Allow all Vercel preview deployments
+    if (origin && origin.match(/\.vercel\.app$/)) return callback(null, true);
     return callback(new Error('CORS: Origin not allowed'));
   },
   credentials: true,
