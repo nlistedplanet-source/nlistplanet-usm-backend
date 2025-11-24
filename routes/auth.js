@@ -111,8 +111,9 @@ router.post(
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+      console.log('[VALIDATION DEBUG]', JSON.stringify({ body: req.body, errors: errors.array() }));
       logAuthEvent('validation_error', req.body?.email, 'failed', ip, req.headers['user-agent']);
-      return res.status(400).json({ success: false, message: 'Invalid input format' });
+      return res.status(400).json({ success: false, message: 'Invalid input format', errors: errors.array() });
     }
     next();
   },
