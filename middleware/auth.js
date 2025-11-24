@@ -62,3 +62,41 @@ export const authorize = (...roles) => {
     next();
   };
 };
+
+// Optional authentication middleware - allows both authenticated and guest users
+export const optionalAuth = async (req, res, next) => {
+  try {
+    let token;
+
+    // Check for token in Authorization header
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+      token = req.headers.authorization.split(' ')[1];
+    }
+
+    // If no token, allow guest access
+    if (!token) {
+      req.user = null;
+      return next();
+    }
+
+    try {
+      // Verify token
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      
+      // Get user from token
+      req.user = await User.findById(decoded.id).select('-password');
+      
+      // If user not found or banned, treat as guest
+      if (!req.user || req.user.isBanned) {
+        req.user = null;
+      }
+    } catch (error) {
+      // If token invalid, treat as guest
+      req.user = null;
+    }
+
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
