@@ -116,7 +116,7 @@ router.post(
   '/register',
   authLimiter,
   body('email').isEmail().normalizeEmail(),
-  body('password').isLength({ min: 12, max: 128 }).matches(/^[a-zA-Z0-9]+$/).withMessage('Password: 12-128 alphanumeric'),
+  body('password').isLength({ min: 5, max: 128 }),
   body('fullName').isLength({ min: 3, max: 100 }).trim().escape(),
   body('phone').matches(/^[0-9]{10}$/),
   body('referredBy').optional().isString().trim().escape().isLength({ max: 20 }),
