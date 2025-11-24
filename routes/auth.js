@@ -54,23 +54,10 @@ const authLimiter = rateLimit({
   legacyHeaders: false
 });
 
-// Validation chains - bank-level security (alphanumeric only - no symbols to avoid XSS warnings)
+// Validation chains - simplified password requirements
 const registerValidation = [
   body('email').isEmail().withMessage('Valid email required').normalizeEmail().isLength({ max: 254 }),
-  body('password').isLength({ min: 12, max: 128 }).withMessage('Password must be 12-128 characters').custom(val => {
-    // Require: uppercase, lowercase, numbers (no special chars to prevent XSS warning)
-    const hasUpper = /[A-Z]/.test(val);
-    const hasLower = /[a-z]/.test(val);
-    const hasNum = /[0-9]/.test(val);
-    const hasOnlyAlphaNum = /^[a-zA-Z0-9]+$/.test(val);
-    if (!hasUpper || !hasLower || !hasNum) {
-      throw new Error('Password must include uppercase, lowercase, and numbers');
-    }
-    if (!hasOnlyAlphaNum) {
-      throw new Error('Password can only contain letters and numbers');
-    }
-    return true;
-  }),
+  body('password').isLength({ min: 5, max: 128 }).withMessage('Password must be 5-128 characters'),
   body('fullName').isLength({ min: 3, max: 100 }).withMessage('Full name must be 3-100 characters').trim().escape(),
   body('phone').matches(/^[0-9]{10}$/).withMessage('Phone must be 10 digits').trim(),
   body('referredBy').optional().isString().trim().escape().isLength({ max: 20 })
