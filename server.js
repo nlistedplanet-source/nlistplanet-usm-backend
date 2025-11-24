@@ -63,10 +63,15 @@ app.use(helmet({
 const extraOrigins = (process.env.CORS_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean);
 const allowedOriginsArray = [
   'http://localhost:3000',
+  'https://localhost:3000',
   process.env.FRONTEND_URL,
+  'https://nlistplanet-iaefn2dmm-nlist-planets-projects.vercel.app',
+  'https://nlistplanet-app.vercel.app',
   ...extraOrigins
 ].filter(Boolean);
 const allowedOrigins = new Set(allowedOriginsArray);
+
+console.log('[CORS] Allowed origins:', Array.from(allowedOrigins));
 
 // Append allowed origins to CSP connectSrc dynamically
 const helmetMiddleware = helmet.contentSecurityPolicy && helmet.contentSecurityPolicy.getDefaultDirectives;
