@@ -16,12 +16,16 @@ import notificationRoutes from './routes/notifications.js';
 import companyRoutes from './routes/companies.js';
 import transactionRoutes from './routes/transactions.js';
 import referralRoutes from './routes/referrals.js';
+import portfolioRoutes from './routes/portfolio.js';
 import adminRoutes from './routes/admin.js';
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
+
+// Trust proxy - Required for Render.com reverse proxy
+app.set('trust proxy', 1);
 
 // Bank-level security headers with strict CSP
 app.use(helmet({
@@ -135,6 +139,7 @@ app.get('/', (req, res) => {
       companies: '/api/companies',
       transactions: '/api/transactions',
       referrals: '/api/referrals',
+      portfolio: '/api/portfolio',
       admin: '/api/admin'
     }
   });
@@ -147,6 +152,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/companies', companyRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/referrals', referralRoutes);
+app.use('/api/portfolio', portfolioRoutes);
 app.use('/api/admin', adminRoutes);
 
 // Health check
