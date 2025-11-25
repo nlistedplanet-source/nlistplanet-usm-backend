@@ -2,6 +2,9 @@ import express from 'express';
 import Listing from '../models/Listing.js';
 import Company from '../models/Company.js';
 import Notification from '../models/Notification.js';
+import ReferralTracking from '../models/ReferralTracking.js';
+import Settings from '../models/Settings.js';
+import User from '../models/User.js';
 import { protect, optionalAuth } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -394,6 +397,85 @@ router.put('/:listingId/bids/:bidId/accept', protect, async (req, res, next) => 
         companyName: listing.companyName
       }
     });
+
+    // ============ AUTOMATIC REFERRAL TRACKING ============
+    try {
+      // Get bidder's details to check for referral
+      const bidder = await User.findById(bid.userId).select('referredBy username fullName');
+      
+      if (bidder && bidder.referredBy) {
+        // Find the referrer
+        const referrer = await User.findOne({ 
+          $or: [
+            { username: bidder.referredBy },
+            { referralCode: bidder.referredBy }
+          ]
+        }).select('_id username referralCode fullName');
+
+        if (referrer) {
+          // Get platform settings for fee calculation
+          let settings = await Settings.findOne();
+          if (!settings) {
+            settings = await Settings.create({});
+          }
+
+          const platformFeePercentage = settings.platformFeePercentage || 2;
+          const referralCommissionPercentage = settings.referralCommissionPercentage || 10;
+
+          // Calculate amounts
+          const dealAmount = bid.price * bid.quantity;
+          const platformRevenue = (dealAmount * platformFeePercentage) / 100;
+          const referralAmount = (platformRevenue * referralCommissionPercentage) / 100;
+
+          // Create referral tracking entry
+          await ReferralTracking.create({
+            referrer: referrer._id,
+            referrerName: referrer.fullName || referrer.username,
+            referrerCode: referrer.referralCode,
+            referee: bidder._id,
+            refereeName: bidder.fullName || bidder.username,
+            listing: listing._id,
+            company: listing.companyId,
+            companyName: listing.companyName,
+            dealAmount,
+            quantity: bid.quantity,
+            pricePerShare: bid.price,
+            platformFeePercentage,
+            platformRevenue,
+            referralCommissionPercentage,
+            referralAmount,
+            dealType: listing.type,
+            status: 'pending'
+          });
+
+          // Update referrer's stats
+          await User.findByIdAndUpdate(referrer._id, {
+            $inc: { 
+              totalReferrals: 1,
+              totalEarnings: referralAmount 
+            }
+          });
+
+          // Notify referrer about earning
+          await Notification.create({
+            userId: referrer._id,
+            type: 'referral_earning',
+            title: '💰 Referral Earning!',
+            message: `You earned ₹${referralAmount.toFixed(2)} from ${bidder.fullName || bidder.username}'s deal of ${bid.quantity} ${listing.companyName} shares!`,
+            data: {
+              dealAmount,
+              referralAmount,
+              refereeName: bidder.fullName || bidder.username,
+              companyName: listing.companyName
+            }
+          });
+        }
+      }
+    } catch (referralError) {
+      // Log error but don't fail the bid acceptance
+      console.error('Error creating referral tracking:', referralError);
+    }
+    // ============ END REFERRAL TRACKING ============
 
     res.json({
       success: true,
