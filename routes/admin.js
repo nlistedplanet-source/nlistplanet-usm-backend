@@ -5,6 +5,7 @@ import Listing from '../models/Listing.js';
 import Transaction from '../models/Transaction.js';
 import Company from '../models/Company.js';
 import Settings from '../models/Settings.js';
+import Ad from '../models/Ad.js';
 import { protect, authorize } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -728,6 +729,194 @@ router.put('/settings', async (req, res, next) => {
       success: true,
       message: 'Settings updated successfully',
       data: settings
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ==================== AD MANAGEMENT ROUTES ====================
+
+// @route   GET /api/admin/ads
+// @desc    Get all ads with filters
+// @access  Admin
+router.get('/ads', async (req, res, next) => {
+  try {
+    const { status, position, search, sortBy = '-createdAt' } = req.query;
+
+    // Build query
+    const query = {};
+    if (status) query.status = status;
+    if (position) query.position = position;
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const ads = await Ad.find(query)
+      .populate('createdBy', 'name email')
+      .sort(sortBy)
+      .lean();
+
+    // Calculate stats
+    const totalAds = ads.length;
+    const activeAds = ads.filter(ad => ad.status === 'active').length;
+    const totalImpressions = ads.reduce((sum, ad) => sum + ad.impressions, 0);
+    const totalClicks = ads.reduce((sum, ad) => sum + ad.clicks, 0);
+    const avgCTR = totalImpressions > 0 ? ((totalClicks / totalImpressions) * 100).toFixed(2) : 0;
+
+    res.json({
+      success: true,
+      data: ads,
+      stats: {
+        totalAds,
+        activeAds,
+        totalImpressions,
+        totalClicks,
+        avgCTR
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   POST /api/admin/ads
+// @desc    Create new ad
+// @access  Admin
+router.post('/ads', async (req, res, next) => {
+  try {
+    const adData = {
+      ...req.body,
+      createdBy: req.user._id
+    };
+
+    const ad = await Ad.create(adData);
+
+    res.status(201).json({
+      success: true,
+      message: 'Ad created successfully',
+      data: ad
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   GET /api/admin/ads/:id
+// @desc    Get single ad
+// @access  Admin
+router.get('/ads/:id', async (req, res, next) => {
+  try {
+    const ad = await Ad.findById(req.params.id)
+      .populate('createdBy', 'name email');
+
+    if (!ad) {
+      return res.status(404).json({
+        success: false,
+        message: 'Ad not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: ad
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   PUT /api/admin/ads/:id
+// @desc    Update ad
+// @access  Admin
+router.put('/ads/:id', async (req, res, next) => {
+  try {
+    const ad = await Ad.findById(req.params.id);
+
+    if (!ad) {
+      return res.status(404).json({
+        success: false,
+        message: 'Ad not found'
+      });
+    }
+
+    // Update fields
+    Object.keys(req.body).forEach(key => {
+      if (req.body[key] !== undefined) {
+        ad[key] = req.body[key];
+      }
+    });
+
+    await ad.save();
+
+    res.json({
+      success: true,
+      message: 'Ad updated successfully',
+      data: ad
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   PUT /api/admin/ads/:id/status
+// @desc    Update ad status
+// @access  Admin
+router.put('/ads/:id/status', async (req, res, next) => {
+  try {
+    const { status } = req.body;
+
+    if (!['active', 'paused', 'expired'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid status value'
+      });
+    }
+
+    const ad = await Ad.findById(req.params.id);
+
+    if (!ad) {
+      return res.status(404).json({
+        success: false,
+        message: 'Ad not found'
+      });
+    }
+
+    ad.status = status;
+    await ad.save();
+
+    res.json({
+      success: true,
+      message: `Ad ${status} successfully`,
+      data: ad
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   DELETE /api/admin/ads/:id
+// @desc    Delete ad
+// @access  Admin
+router.delete('/ads/:id', async (req, res, next) => {
+  try {
+    const ad = await Ad.findById(req.params.id);
+
+    if (!ad) {
+      return res.status(404).json({
+        success: false,
+        message: 'Ad not found'
+      });
+    }
+
+    await ad.deleteOne();
+
+    res.json({
+      success: true,
+      message: 'Ad deleted successfully'
     });
   } catch (error) {
     next(error);
