@@ -210,13 +210,13 @@ router.post('/companies', upload.single('logo'), async (req, res, next) => {
 
     const company = await Company.create({
       name: name.trim(),
-      scriptName: scriptName?.trim() || null,
+      scriptName: scriptName && scriptName.trim() ? scriptName.trim() : null,
       sector: sector.trim(),
       logo: logoData,
-      isin: isin?.trim() || null,
-      cin: cin?.trim() || null,
-      pan: pan?.trim() || null,
-      description: description?.trim() || null
+      isin: isin && isin.trim() ? isin.trim() : null,
+      cin: cin && cin.trim() ? cin.trim() : null,
+      pan: pan && pan.trim() ? pan.trim() : null,
+      description: description && description.trim() ? description.trim() : null
     });
 
     res.status(201).json({
@@ -251,13 +251,13 @@ router.put('/companies/:id', upload.single('logo'), async (req, res, next) => {
     }
 
     // Update fields
-    if (name) company.name = name.trim();
-    if (scriptName !== undefined) company.scriptName = scriptName?.trim() || null;
-    if (sector) company.sector = sector.trim();
-    if (isin !== undefined) company.isin = isin?.trim() || null;
-    if (cin !== undefined) company.cin = cin?.trim() || null;
-    if (pan !== undefined) company.pan = pan?.trim() || null;
-    if (description !== undefined) company.description = description?.trim() || null;
+    if (name && name.trim()) company.name = name.trim();
+    if (scriptName !== undefined) company.scriptName = scriptName && scriptName.trim() ? scriptName.trim() : null;
+    if (sector && sector.trim()) company.sector = sector.trim();
+    if (isin !== undefined) company.isin = isin && isin.trim() ? isin.trim() : null;
+    if (cin !== undefined) company.cin = cin && cin.trim() ? cin.trim() : null;
+    if (pan !== undefined) company.pan = pan && pan.trim() ? pan.trim() : null;
+    if (description !== undefined) company.description = description && description.trim() ? description.trim() : null;
 
     // Handle logo upload
     if (req.file) {
