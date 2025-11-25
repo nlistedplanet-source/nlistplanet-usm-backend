@@ -4,6 +4,7 @@ import User from '../models/User.js';
 import Listing from '../models/Listing.js';
 import Transaction from '../models/Transaction.js';
 import Company from '../models/Company.js';
+import Settings from '../models/Settings.js';
 import { protect, authorize } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -653,6 +654,57 @@ router.delete('/companies/:id', async (req, res, next) => {
     res.json({
       success: true,
       message: 'Company deleted successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   GET /api/admin/settings
+// @desc    Get platform settings
+// @access  Admin
+router.get('/settings', async (req, res, next) => {
+  try {
+    let settings = await Settings.findOne();
+    
+    // Create default settings if none exist
+    if (!settings) {
+      settings = await Settings.create({});
+    }
+
+    res.json({
+      success: true,
+      data: settings
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   PUT /api/admin/settings
+// @desc    Update platform settings
+// @access  Admin
+router.put('/settings', async (req, res, next) => {
+  try {
+    let settings = await Settings.findOne();
+
+    if (!settings) {
+      settings = await Settings.create(req.body);
+    } else {
+      // Update all provided fields
+      Object.keys(req.body).forEach(key => {
+        if (req.body[key] !== undefined) {
+          settings[key] = req.body[key];
+        }
+      });
+      settings.lastUpdatedBy = req.user._id;
+      await settings.save();
+    }
+
+    res.json({
+      success: true,
+      message: 'Settings updated successfully',
+      data: settings
     });
   } catch (error) {
     next(error);
