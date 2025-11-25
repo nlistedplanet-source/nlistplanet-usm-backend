@@ -6,6 +6,7 @@ import Transaction from '../models/Transaction.js';
 import Company from '../models/Company.js';
 import Settings from '../models/Settings.js';
 import Ad from '../models/Ad.js';
+import ReferralTracking from '../models/ReferralTracking.js';
 import { protect, authorize } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -917,6 +918,235 @@ router.delete('/ads/:id', async (req, res, next) => {
     res.json({
       success: true,
       message: 'Ad deleted successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ==================== REFERRAL TRACKING ROUTES ====================
+
+// @route   GET /api/admin/referrals/stats
+// @desc    Get referral tracking overview stats
+// @access  Admin
+router.get('/referrals/stats', async (req, res, next) => {
+  try {
+    const totalReferrals = await ReferralTracking.countDocuments();
+    const pendingReferrals = await ReferralTracking.countDocuments({ status: 'pending' });
+    const approvedReferrals = await ReferralTracking.countDocuments({ status: 'approved' });
+    const paidReferrals = await ReferralTracking.countDocuments({ status: 'paid' });
+
+    // Calculate total amounts
+    const totalDealAmount = await ReferralTracking.aggregate([
+      { $group: { _id: null, total: { $sum: '$dealAmount' } } }
+    ]);
+
+    const totalPlatformRevenue = await ReferralTracking.aggregate([
+      { $group: { _id: null, total: { $sum: '$platformRevenue' } } }
+    ]);
+
+    const totalReferralAmount = await ReferralTracking.aggregate([
+      { $group: { _id: null, total: { $sum: '$referralAmount' } } }
+    ]);
+
+    const pendingReferralAmount = await ReferralTracking.aggregate([
+      { $match: { status: { $in: ['pending', 'approved'] } } },
+      { $group: { _id: null, total: { $sum: '$referralAmount' } } }
+    ]);
+
+    const paidReferralAmount = await ReferralTracking.aggregate([
+      { $match: { status: 'paid' } },
+      { $group: { _id: null, total: { $sum: '$referralAmount' } } }
+    ]);
+
+    // Top referrers
+    const topReferrers = await ReferralTracking.aggregate([
+      { $group: { 
+          _id: '$referrer', 
+          referrerName: { $first: '$referrerName' },
+          totalDeals: { $sum: 1 },
+          totalEarnings: { $sum: '$referralAmount' }
+        } 
+      },
+      { $sort: { totalEarnings: -1 } },
+      { $limit: 5 }
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        overview: {
+          totalReferrals,
+          pendingReferrals,
+          approvedReferrals,
+          paidReferrals
+        },
+        financial: {
+          totalDealAmount: totalDealAmount[0]?.total || 0,
+          totalPlatformRevenue: totalPlatformRevenue[0]?.total || 0,
+          totalReferralAmount: totalReferralAmount[0]?.total || 0,
+          pendingReferralAmount: pendingReferralAmount[0]?.total || 0,
+          paidReferralAmount: paidReferralAmount[0]?.total || 0
+        },
+        topReferrers
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   GET /api/admin/referrals
+// @desc    Get all referral tracking records with filters
+// @access  Admin
+router.get('/referrals', async (req, res, next) => {
+  try {
+    const { status, referrer, search, sortBy = '-createdAt', startDate, endDate } = req.query;
+
+    // Build query
+    const query = {};
+    if (status) query.status = status;
+    if (referrer) query.referrer = referrer;
+    if (search) {
+      query.$or = [
+        { referrerName: { $regex: search, $options: 'i' } },
+        { refereeName: { $regex: search, $options: 'i' } },
+        { companyName: { $regex: search, $options: 'i' } }
+      ];
+    }
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) query.createdAt.$gte = new Date(startDate);
+      if (endDate) query.createdAt.$lte = new Date(endDate);
+    }
+
+    const referrals = await ReferralTracking.find(query)
+      .populate('referrer', 'name email phone')
+      .populate('referee', 'name email phone')
+      .populate('company', 'name logo')
+      .populate('listing', 'type quantity price')
+      .sort(sortBy)
+      .lean();
+
+    // Calculate stats for filtered results
+    const totalDealAmount = referrals.reduce((sum, ref) => sum + ref.dealAmount, 0);
+    const totalPlatformRevenue = referrals.reduce((sum, ref) => sum + ref.platformRevenue, 0);
+    const totalReferralAmount = referrals.reduce((sum, ref) => sum + ref.referralAmount, 0);
+
+    res.json({
+      success: true,
+      data: referrals,
+      stats: {
+        count: referrals.length,
+        totalDealAmount,
+        totalPlatformRevenue,
+        totalReferralAmount
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   GET /api/admin/referrals/:id
+// @desc    Get single referral tracking record
+// @access  Admin
+router.get('/referrals/:id', async (req, res, next) => {
+  try {
+    const referral = await ReferralTracking.findById(req.params.id)
+      .populate('referrer', 'name email phone')
+      .populate('referee', 'name email phone')
+      .populate('company', 'name logo')
+      .populate('listing', 'type quantity price status')
+      .populate('transaction');
+
+    if (!referral) {
+      return res.status(404).json({
+        success: false,
+        message: 'Referral record not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: referral
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   PUT /api/admin/referrals/:id/status
+// @desc    Update referral status (approve/reject/paid)
+// @access  Admin
+router.put('/referrals/:id/status', async (req, res, next) => {
+  try {
+    const { status, paymentMethod, paymentReference, notes } = req.body;
+
+    if (!['pending', 'approved', 'paid', 'rejected'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid status value'
+      });
+    }
+
+    const referral = await ReferralTracking.findById(req.params.id);
+
+    if (!referral) {
+      return res.status(404).json({
+        success: false,
+        message: 'Referral record not found'
+      });
+    }
+
+    referral.status = status;
+    if (status === 'paid') {
+      referral.paidAt = new Date();
+      if (paymentMethod) referral.paymentMethod = paymentMethod;
+      if (paymentReference) referral.paymentReference = paymentReference;
+    }
+    if (notes) referral.notes = notes;
+
+    await referral.save();
+
+    res.json({
+      success: true,
+      message: `Referral ${status} successfully`,
+      data: referral
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   PUT /api/admin/referrals/:id
+// @desc    Update referral details
+// @access  Admin
+router.put('/referrals/:id', async (req, res, next) => {
+  try {
+    const referral = await ReferralTracking.findById(req.params.id);
+
+    if (!referral) {
+      return res.status(404).json({
+        success: false,
+        message: 'Referral record not found'
+      });
+    }
+
+    // Update allowed fields
+    const allowedFields = ['notes', 'paymentMethod', 'paymentReference'];
+    allowedFields.forEach(field => {
+      if (req.body[field] !== undefined) {
+        referral[field] = req.body[field];
+      }
+    });
+
+    await referral.save();
+
+    res.json({
+      success: true,
+      message: 'Referral updated successfully',
+      data: referral
     });
   } catch (error) {
     next(error);
