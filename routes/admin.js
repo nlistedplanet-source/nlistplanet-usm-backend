@@ -210,13 +210,13 @@ router.post('/companies', upload.single('logo'), async (req, res, next) => {
 
     const company = await Company.create({
       name: name.trim(),
-      scriptName: scriptName && scriptName.trim() ? scriptName.trim() : null,
+      scriptName: (scriptName && scriptName.trim()) ? scriptName.trim() : null,
       sector: sector.trim(),
       logo: logoData,
-      isin: isin && isin.trim() ? isin.trim() : null,
-      cin: cin && cin.trim() ? cin.trim() : null,
-      pan: pan && pan.trim() ? pan.trim() : null,
-      description: description && description.trim() ? description.trim() : null
+      isin: (isin && isin.trim()) ? isin.trim() : null,
+      cin: (cin && cin.trim()) ? cin.trim() : null,
+      pan: (pan && pan.trim()) ? pan.trim() : null,
+      description: (description && description.trim()) ? description.trim() : null
     });
 
     res.status(201).json({
@@ -231,6 +231,15 @@ router.post('/companies', upload.single('logo'), async (req, res, next) => {
         message: 'Company with this name already exists'
       });
     }
+    // Better error handling for validation errors
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({
+        success: false,
+        message: messages.join(', ')
+      });
+    }
+    console.error('Company create error:', error);
     next(error);
   }
 });
@@ -250,14 +259,14 @@ router.put('/companies/:id', upload.single('logo'), async (req, res, next) => {
       });
     }
 
-    // Update fields
+    // Update fields with proper null handling
     if (name && name.trim()) company.name = name.trim();
-    if (scriptName !== undefined) company.scriptName = scriptName && scriptName.trim() ? scriptName.trim() : null;
+    company.scriptName = (scriptName && scriptName.trim()) ? scriptName.trim() : null;
     if (sector && sector.trim()) company.sector = sector.trim();
-    if (isin !== undefined) company.isin = isin && isin.trim() ? isin.trim() : null;
-    if (cin !== undefined) company.cin = cin && cin.trim() ? cin.trim() : null;
-    if (pan !== undefined) company.pan = pan && pan.trim() ? pan.trim() : null;
-    if (description !== undefined) company.description = description && description.trim() ? description.trim() : null;
+    company.isin = (isin && isin.trim()) ? isin.trim() : null;
+    company.cin = (cin && cin.trim()) ? cin.trim() : null;
+    company.pan = (pan && pan.trim()) ? pan.trim() : null;
+    company.description = (description && description.trim()) ? description.trim() : null;
 
     // Handle logo upload
     if (req.file) {
@@ -278,6 +287,15 @@ router.put('/companies/:id', upload.single('logo'), async (req, res, next) => {
         message: 'Company with this name already exists'
       });
     }
+    // Better error handling for validation errors
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({
+        success: false,
+        message: messages.join(', ')
+      });
+    }
+    console.error('Company update error:', error);
     next(error);
   }
 });
