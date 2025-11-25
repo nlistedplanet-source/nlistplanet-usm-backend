@@ -183,7 +183,7 @@ router.get('/my-placed-bids', protect, async (req, res, next) => {
 // @access  Private
 router.post('/', protect, async (req, res, next) => {
   try {
-    const { type, companyId, price, quantity, minLot, description } = req.body;
+    const { type, companyId, price, quantity, minLot, companySegmentation, description } = req.body;
 
     // Validate company exists
     const company = await Company.findById(companyId);
@@ -201,6 +201,7 @@ router.post('/', protect, async (req, res, next) => {
       type,
       companyId,
       companyName: company.CompanyName || company.name,
+      companySegmentation: companySegmentation || null,
       price,
       quantity,
       minLot: minLot || 1,

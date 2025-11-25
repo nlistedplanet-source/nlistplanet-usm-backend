@@ -191,7 +191,7 @@ router.get('/companies', async (req, res, next) => {
 // @access  Admin
 router.post('/companies', upload.single('logo'), async (req, res, next) => {
   try {
-    const { name, scriptName, sector, isin, cin, pan, description } = req.body;
+    const { name, scriptName, sector, isin, cin, pan, registrationDate, description } = req.body;
 
     // Check if company already exists
     const existingCompany = await Company.findOne({ name: name.trim() });
@@ -216,6 +216,7 @@ router.post('/companies', upload.single('logo'), async (req, res, next) => {
       isin: (isin && isin.trim()) ? isin.trim() : null,
       cin: (cin && cin.trim()) ? cin.trim() : null,
       pan: (pan && pan.trim()) ? pan.trim() : null,
+      registrationDate: registrationDate ? new Date(registrationDate) : null,
       description: (description && description.trim()) ? description.trim() : null
     });
 
@@ -249,7 +250,7 @@ router.post('/companies', upload.single('logo'), async (req, res, next) => {
 // @access  Admin
 router.put('/companies/:id', upload.single('logo'), async (req, res, next) => {
   try {
-    const { name, scriptName, sector, isin, cin, pan, description } = req.body;
+    const { name, scriptName, sector, isin, cin, pan, registrationDate, description } = req.body;
     
     const company = await Company.findById(req.params.id);
     if (!company) {
@@ -266,6 +267,7 @@ router.put('/companies/:id', upload.single('logo'), async (req, res, next) => {
     company.isin = (isin && isin.trim()) ? isin.trim() : null;
     company.cin = (cin && cin.trim()) ? cin.trim() : null;
     company.pan = (pan && pan.trim()) ? pan.trim() : null;
+    company.registrationDate = registrationDate ? new Date(registrationDate) : null;
     company.description = (description && description.trim()) ? description.trim() : null;
 
     // Handle logo upload

@@ -40,6 +40,10 @@ const companySchema = new mongoose.Schema({
   },
   website: String,
   foundedYear: Number,
+  registrationDate: {
+    type: Date,
+    default: null
+  },
   totalListings: {
     type: Number,
     default: 0

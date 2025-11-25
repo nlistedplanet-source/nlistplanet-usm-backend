@@ -56,6 +56,11 @@ const listingSchema = new mongoose.Schema({
     required: true
   },
   companyName: String,
+  companySegmentation: {
+    type: String,
+    enum: ['SME', 'Mainboard', 'Unlisted', 'Pre-IPO', 'Startup'],
+    default: null
+  },
   price: {
     type: Number,
     required: true
