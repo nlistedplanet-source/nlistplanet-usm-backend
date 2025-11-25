@@ -18,6 +18,7 @@ import transactionRoutes from './routes/transactions.js';
 import referralRoutes from './routes/referrals.js';
 import portfolioRoutes from './routes/portfolio.js';
 import adminRoutes from './routes/admin.js';
+import adminCompaniesRoutes from './routes/adminCompanies.js';
 
 // Load environment variables
 dotenv.config();
@@ -161,6 +162,7 @@ app.use('/api/transactions', transactionRoutes);
 app.use('/api/referrals', referralRoutes);
 app.use('/api/portfolio', portfolioRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/admin', adminCompaniesRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
