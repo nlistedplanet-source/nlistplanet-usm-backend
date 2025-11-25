@@ -5,8 +5,8 @@ services:
     region: oregon
     plan: free
     rootDir: .
-    buildCommand: npm ci --only=production
-    startCommand: node server.js
+    buildCommand: npm ci --only=production --ignore-scripts
+    startCommand: node server-fast.js
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
