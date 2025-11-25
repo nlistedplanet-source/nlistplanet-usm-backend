@@ -227,6 +227,87 @@ router.put('/listings/:id/status', async (req, res, next) => {
   }
 });
 
+// @route   GET /api/admin/transactions
+// @desc    Get all transactions with filters
+// @access  Admin
+router.get('/transactions', async (req, res, next) => {
+  try {
+    const { page = 1, limit = 20, type, status, search } = req.query;
+    const skip = (page - 1) * limit;
+
+    const query = {};
+    
+    // Filter by type
+    if (type) {
+      query.type = type;
+    }
+    
+    // Filter by status
+    if (status) {
+      query.status = status;
+    }
+    
+    // Search by company name or description
+    if (search) {
+      query.$or = [
+        { companyName: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const transactions = await Transaction.find(query)
+      .populate('buyerId', 'username email fullName')
+      .populate('sellerId', 'username email fullName')
+      .populate('affiliateId', 'username email fullName')
+      .populate('listingId', 'companyName type')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const total = await Transaction.countDocuments(query);
+
+    // Calculate stats
+    const stats = await Transaction.aggregate([
+      { $match: query },
+      {
+        $group: {
+          _id: null,
+          totalAmount: { $sum: '$amount' },
+          platformFees: { 
+            $sum: { 
+              $cond: [{ $eq: ['$type', 'platform_fee'] }, '$amount', 0] 
+            } 
+          },
+          boostFees: { 
+            $sum: { 
+              $cond: [{ $eq: ['$type', 'boost_fee'] }, '$amount', 0] 
+            } 
+          },
+          commissions: { 
+            $sum: { 
+              $cond: [{ $eq: ['$type', 'affiliate_commission'] }, '$amount', 0] 
+            } 
+          }
+        }
+      }
+    ]);
+
+    res.json({
+      success: true,
+      data: transactions,
+      stats: stats[0] || { totalAmount: 0, platformFees: 0, boostFees: 0, commissions: 0 },
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // @route   PUT /api/admin/users/:id/ban
 // @desc    Ban/Unban user
 // @access  Admin
