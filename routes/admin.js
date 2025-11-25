@@ -156,11 +156,34 @@ router.get('/listings', async (req, res, next) => {
       .skip(skip)
       .limit(parseInt(limit));
 
+    // Get platform settings for fee calculation
+    let settings = await Settings.findOne();
+    if (!settings) {
+      settings = await Settings.create({});
+    }
+    const platformFeePercentage = settings.platformFeePercentage || 2;
+
+    // Add fee calculations to each listing
+    const listingsWithFees = listings.map(listing => {
+      const listingObj = listing.toObject();
+      const baseAmount = listing.price * listing.quantity;
+      const platformFee = (baseAmount * platformFeePercentage) / 100;
+      const totalAmount = baseAmount + platformFee;
+      
+      return {
+        ...listingObj,
+        baseAmount,
+        platformFee,
+        platformFeePercentage,
+        totalAmount
+      };
+    });
+
     const total = await Listing.countDocuments(query);
 
     res.json({
       success: true,
-      data: listings,
+      data: listingsWithFees,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
