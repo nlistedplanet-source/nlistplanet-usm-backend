@@ -68,7 +68,7 @@ router.get('/stats', async (req, res, next) => {
 });
 
 // @route   GET /api/admin/users
-// @desc    Get all users
+// @desc    Get all users with activity stats
 // @access  Admin
 router.get('/users', async (req, res, next) => {
   try {
@@ -90,11 +90,28 @@ router.get('/users', async (req, res, next) => {
       .skip(skip)
       .limit(parseInt(limit));
 
+    // Get listing and trade counts for each user
+    const usersWithStats = await Promise.all(
+      users.map(async (user) => {
+        const listingsCount = await Listing.countDocuments({ userId: user._id });
+        const tradesCount = await Listing.countDocuments({ 
+          userId: user._id, 
+          status: 'sold' 
+        });
+        
+        return {
+          ...user.toObject(),
+          listingsCount,
+          tradesCount
+        };
+      })
+    );
+
     const total = await User.countDocuments(query);
 
     res.json({
       success: true,
-      data: users,
+      data: usersWithStats,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
