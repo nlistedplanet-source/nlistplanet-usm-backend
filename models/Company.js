@@ -7,6 +7,11 @@ const companySchema = new mongoose.Schema({
     trim: true,
     unique: true
   },
+  scriptName: {
+    type: String,
+    trim: true,
+    default: null
+  },
   logo: {
     type: String,
     default: null

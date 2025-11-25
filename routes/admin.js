@@ -1,4 +1,5 @@
 import express from 'express';
+import multer from 'multer';
 import User from '../models/User.js';
 import Listing from '../models/Listing.js';
 import Transaction from '../models/Transaction.js';
@@ -6,6 +7,20 @@ import Company from '../models/Company.js';
 import { protect, authorize } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// Configure multer for memory storage
+const storage = multer.memoryStorage();
+const upload = multer({ 
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'), false);
+    }
+  }
+});
 
 // All routes require admin role
 router.use(protect, authorize('admin'));
@@ -133,6 +148,171 @@ router.post('/companies', async (req, res, next) => {
       success: true,
       message: 'Company created successfully',
       data: company
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   GET /api/admin/companies
+// @desc    Get all companies with stats
+// @access  Admin
+router.get('/companies', async (req, res, next) => {
+  try {
+    const companies = await Company.find({}).sort({ name: 1 });
+
+    // Get listing counts for each company
+    const companiesWithStats = await Promise.all(
+      companies.map(async (company) => {
+        const listingsCount = await Listing.countDocuments({ 
+          companyId: company._id,
+          status: 'active'
+        });
+        
+        return {
+          ...company.toObject(),
+          listingsCount
+        };
+      })
+    );
+
+    res.json({
+      success: true,
+      count: companiesWithStats.length,
+      companies: companiesWithStats
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   POST /api/admin/companies
+// @desc    Create new company with logo upload
+// @access  Admin
+router.post('/companies', upload.single('logo'), async (req, res, next) => {
+  try {
+    const { name, scriptName, sector, isin, cin, pan, description } = req.body;
+
+    // Check if company already exists
+    const existingCompany = await Company.findOne({ name: name.trim() });
+    if (existingCompany) {
+      return res.status(400).json({
+        success: false,
+        message: 'Company with this name already exists'
+      });
+    }
+
+    // Handle logo upload - convert to base64 if file provided
+    let logoData = null;
+    if (req.file) {
+      logoData = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    }
+
+    const company = await Company.create({
+      name: name.trim(),
+      scriptName: scriptName?.trim() || null,
+      sector: sector.trim(),
+      logo: logoData,
+      isin: isin?.trim() || null,
+      cin: cin?.trim() || null,
+      pan: pan?.trim() || null,
+      description: description?.trim() || null
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Company created successfully',
+      data: company
+    });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Company with this name already exists'
+      });
+    }
+    next(error);
+  }
+});
+
+// @route   PUT /api/admin/companies/:id
+// @desc    Update company with logo upload
+// @access  Admin
+router.put('/companies/:id', upload.single('logo'), async (req, res, next) => {
+  try {
+    const { name, scriptName, sector, isin, cin, pan, description } = req.body;
+    
+    const company = await Company.findById(req.params.id);
+    if (!company) {
+      return res.status(404).json({
+        success: false,
+        message: 'Company not found'
+      });
+    }
+
+    // Update fields
+    if (name) company.name = name.trim();
+    if (scriptName !== undefined) company.scriptName = scriptName?.trim() || null;
+    if (sector) company.sector = sector.trim();
+    if (isin !== undefined) company.isin = isin?.trim() || null;
+    if (cin !== undefined) company.cin = cin?.trim() || null;
+    if (pan !== undefined) company.pan = pan?.trim() || null;
+    if (description !== undefined) company.description = description?.trim() || null;
+
+    // Handle logo upload
+    if (req.file) {
+      company.logo = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    }
+
+    await company.save();
+
+    res.json({
+      success: true,
+      message: 'Company updated successfully',
+      data: company
+    });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Company with this name already exists'
+      });
+    }
+    next(error);
+  }
+});
+
+// @route   DELETE /api/admin/companies/:id
+// @desc    Delete company
+// @access  Admin
+router.delete('/companies/:id', async (req, res, next) => {
+  try {
+    const company = await Company.findById(req.params.id);
+    if (!company) {
+      return res.status(404).json({
+        success: false,
+        message: 'Company not found'
+      });
+    }
+
+    // Check if company has active listings
+    const activeListings = await Listing.countDocuments({
+      companyId: company._id,
+      status: 'active'
+    });
+
+    if (activeListings > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delete company with ${activeListings} active listings`
+      });
+    }
+
+    await company.deleteOne();
+
+    res.json({
+      success: true,
+      message: 'Company deleted successfully'
     });
   } catch (error) {
     next(error);
