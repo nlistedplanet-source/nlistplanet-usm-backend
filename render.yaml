@@ -4,6 +4,8 @@ services:
     env: node
     region: oregon
     plan: free
+    branch: main
+    autoDeploy: true
     rootDir: .
     buildCommand: npm ci --only=production --ignore-scripts
     startCommand: node server-fast.js
