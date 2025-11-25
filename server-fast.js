@@ -121,6 +121,7 @@ app.listen(PORT, () => {
   console.log(`📱 Environment: ${process.env.NODE_ENV}`);
   console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL}`);
   console.log(`⚡ Fast Deploy Mode: OCR disabled`);
+  console.log(`📡 Auto-deploy test - ${new Date().toISOString()}`);
 });
 
 export default app;
