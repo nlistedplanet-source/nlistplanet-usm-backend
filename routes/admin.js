@@ -124,6 +124,109 @@ router.get('/users', async (req, res, next) => {
   }
 });
 
+// @route   GET /api/admin/listings
+// @desc    Get all listings for admin with filters
+// @access  Admin
+router.get('/listings', async (req, res, next) => {
+  try {
+    const { page = 1, limit = 20, search, type, status } = req.query;
+    const skip = (page - 1) * limit;
+
+    const query = {};
+    
+    // Search by company name or username
+    if (search) {
+      query.$or = [
+        { companyName: { $regex: search, $options: 'i' } },
+        { username: { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    // Filter by type
+    if (type) query.type = type;
+    
+    // Filter by status
+    if (status) query.status = status;
+
+    const listings = await Listing.find(query)
+      .populate('userId', 'username email fullName')
+      .populate('companyId', 'name scriptName logo sector')
+      .sort('-createdAt')
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const total = await Listing.countDocuments(query);
+
+    res.json({
+      success: true,
+      data: listings,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   DELETE /api/admin/listings/:id
+// @desc    Delete a listing
+// @access  Admin
+router.delete('/listings/:id', async (req, res, next) => {
+  try {
+    const listing = await Listing.findById(req.params.id);
+    
+    if (!listing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Listing not found'
+      });
+    }
+
+    await listing.deleteOne();
+
+    res.json({
+      success: true,
+      message: 'Listing deleted successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   PUT /api/admin/listings/:id/status
+// @desc    Update listing status
+// @access  Admin
+router.put('/listings/:id/status', async (req, res, next) => {
+  try {
+    const { status } = req.body;
+    
+    const listing = await Listing.findByIdAndUpdate(
+      req.params.id,
+      { status },
+      { new: true }
+    );
+
+    if (!listing) {
+      return res.status(404).json({
+        success: false,
+        message: 'Listing not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Listing status updated successfully',
+      data: listing
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // @route   PUT /api/admin/users/:id/ban
 // @desc    Ban/Unban user
 // @access  Admin
