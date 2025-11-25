@@ -308,6 +308,125 @@ router.get('/transactions', async (req, res, next) => {
   }
 });
 
+// @route   GET /api/admin/reports
+// @desc    Get detailed platform reports and analytics
+// @access  Admin
+router.get('/reports', async (req, res, next) => {
+  try {
+    const { period = '30' } = req.query; // days
+    const daysAgo = new Date();
+    daysAgo.setDate(daysAgo.getDate() - parseInt(period));
+
+    // User growth
+    const userGrowth = await User.aggregate([
+      { $match: { createdAt: { $gte: daysAgo } } },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    // Listing statistics
+    const listingStats = await Listing.aggregate([
+      {
+        $group: {
+          _id: '$type',
+          count: { $sum: 1 },
+          totalValue: { $sum: { $multiply: ['$price', '$quantity'] } }
+        }
+      }
+    ]);
+
+    const listingsByStatus = await Listing.aggregate([
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    // Revenue breakdown
+    const revenueByType = await Transaction.aggregate([
+      { $match: { createdAt: { $gte: daysAgo } } },
+      {
+        $group: {
+          _id: '$type',
+          totalAmount: { $sum: '$amount' },
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const revenueTimeline = await Transaction.aggregate([
+      { $match: { createdAt: { $gte: daysAgo } } },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          revenue: { $sum: '$amount' }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    // Top performing companies
+    const topCompanies = await Listing.aggregate([
+      { $match: { status: 'active' } },
+      {
+        $group: {
+          _id: '$companyName',
+          totalListings: { $sum: 1 },
+          totalValue: { $sum: { $multiply: ['$price', '$quantity'] } }
+        }
+      },
+      { $sort: { totalValue: -1 } },
+      { $limit: 10 }
+    ]);
+
+    // Active users statistics
+    const totalUsers = await User.countDocuments();
+    const activeUsers = await User.countDocuments({ 
+      lastLogin: { $gte: daysAgo } 
+    });
+    const bannedUsers = await User.countDocuments({ isBanned: true });
+
+    // Transaction statistics
+    const totalTransactions = await Transaction.countDocuments();
+    const recentTransactions = await Transaction.countDocuments({ 
+      createdAt: { $gte: daysAgo } 
+    });
+
+    res.json({
+      success: true,
+      data: {
+        period: parseInt(period),
+        overview: {
+          totalUsers,
+          activeUsers,
+          bannedUsers,
+          totalTransactions,
+          recentTransactions
+        },
+        userGrowth,
+        listingStats: {
+          byType: listingStats,
+          byStatus: listingsByStatus
+        },
+        revenue: {
+          byType: revenueByType,
+          timeline: revenueTimeline
+        },
+        topCompanies
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // @route   PUT /api/admin/users/:id/ban
 // @desc    Ban/Unban user
 // @access  Admin
