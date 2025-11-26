@@ -172,11 +172,36 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
 userSchema.methods.getPublicProfile = function() {
   return {
     id: this._id,
+    userId: this._id.toString().slice(-6).toUpperCase(),
     username: this.username,
+    email: this.email,
     fullName: this.fullName,
+    phone: this.phone,
+    dob: this.dob,
+    gender: this.gender,
     avatar: this.avatar,
+    role: this.role,
+    isVerified: this.isVerified,
+    // Address fields
+    addressLine1: this.addressLine1,
+    addressLine2: this.addressLine2,
+    city: this.city,
+    state: this.state,
+    pincode: this.pincode,
+    country: this.country,
+    // Bank account
+    bankAccount: this.bankAccount,
+    // Nominee
+    nominee: this.nominee,
+    // Referral & Earnings
+    referralCode: this.referralCode,
+    referredBy: this.referredBy,
     totalReferrals: this.totalReferrals,
-    createdAt: this.createdAt
+    totalEarnings: this.totalEarnings,
+    referralCount: this.totalReferrals,
+    earnings: this.totalEarnings,
+    createdAt: this.createdAt,
+    updatedAt: this.updatedAt
   };
 };
 
