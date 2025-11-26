@@ -7,35 +7,50 @@ import { body, validationResult } from 'express-validator';
 
 const router = express.Router();
 
-// Generate Funny Username
+// Generate Funny Username - Short & Memorable
 const generateFunnyUsername = () => {
-  const prefixes = [
-    'ironman', 'batman', 'superman', 'spiderman', 'thor', 'hulk', 'captainamerica', 'blackwidow',
-    'rajnikant', 'salmankhan', 'shahrukhkhan', 'amitabhbachchan', 'akshaykumar', 'hrithikroshan',
-    'deepikapadukone', 'priyankachopra', 'katrinakaif', 'aliabhatt',
-    'sherlock', 'jonsnow', 'tyrionlannister', 'tonystark', 'brucewayne',
-    'delhi', 'mumbai', 'bangalore', 'hyderabad', 'chennai', 'kolkata', 'pune', 'goa',
-    'wolf', 'tiger', 'lion', 'eagle', 'falcon', 'panther', 'cobra', 'dragon',
-    'ninja', 'samurai', 'warrior', 'knight', 'viking', 'spartan',
-    'einstein', 'newton', 'tesla', 'edison', 'darwin',
-    'crypto', 'stock', 'trader', 'investor', 'whale', 'bull', 'bear',
-    'rockstar', 'legend', 'champion', 'master', 'boss', 'king', 'queen',
-    'pixel', 'byte', 'quantum', 'matrix', 'cyber', 'tech', 'digital'
+  const superheroes = [
+    'ironman', 'batman', 'superman', 'spidey', 'thor', 'hulk', 'flash', 'arrow',
+    'widow', 'hawkeye', 'antman', 'wasp', 'vision', 'falcon', 'strange'
   ];
   
-  const suffixes = [
-    'trader', 'investor', 'pro', 'master', 'king', 'queen', 'boss', 'legend',
-    'warrior', 'hero', 'star', 'genius', 'wizard', 'ninja', 'samurai',
-    'returns', 'gains', 'profits', 'wealth', 'rich', 'millionaire',
-    'hustler', 'grinder', 'player', 'gamer', 'winner', 'champion',
-    'alpha', 'sigma', 'omega', 'prime', 'elite', 'supreme',
-    '001', '247', '360', '007', '420', '786', '999'
+  const bollywood = [
+    'srk', 'salman', 'aamir', 'akshay', 'hrithik', 'ranbir', 'ranveer',
+    'deepika', 'priyanka', 'katrina', 'alia', 'anushka', 'kangana'
   ];
   
-  const randomPrefix = prefixes[Math.floor(Math.random() * prefixes.length)];
-  const randomSuffix = suffixes[Math.floor(Math.random() * suffixes.length)];
+  const cartoons = [
+    'jerry', 'tom', 'mickey', 'donald', 'goofy', 'pluto', 'bugs', 'tweety',
+    'scooby', 'shaggy', 'fred', 'velma', 'daphne', 'bart', 'homer', 'lisa',
+    'popeye', 'olive', 'SpongeBob', 'patrick', 'squidward', 'dora', 'diego'
+  ];
   
-  return `${randomPrefix}_${randomSuffix}`;
+  const cities = [
+    'delhi', 'mumbai', 'goa', 'jaipur', 'udaipur', 'shimla', 'manali',
+    'kerala', 'kashmir', 'ladakh', 'pune', 'bangalore', 'mysore'
+  ];
+  
+  const animals = [
+    'wolf', 'tiger', 'lion', 'eagle', 'falcon', 'panther', 'cobra',
+    'dragon', 'shark', 'rhino', 'bear', 'fox', 'leopard'
+  ];
+  
+  const cool = [
+    'ninja', 'samurai', 'viking', 'knight', 'warrior', 'legend', 'ace',
+    'boss', 'king', 'queen', 'crypto', 'trader', 'whale', 'bull'
+  ];
+  
+  // Randomly pick from one of the categories
+  const allNames = [
+    ...superheroes, ...bollywood, ...cartoons, 
+    ...cities, ...animals, ...cool
+  ];
+  
+  const randomName = allNames[Math.floor(Math.random() * allNames.length)];
+  const randomNum = Math.floor(Math.random() * 999) + 1;
+  
+  // Format: name + number (e.g., ironman007, srk420, jerry786)
+  return `${randomName}${randomNum}`;
 };
 
 // Generate JWT Token

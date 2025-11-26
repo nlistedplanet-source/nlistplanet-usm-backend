@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const adSchema = new mongoose.Schema({
   title: {
@@ -93,4 +93,5 @@ adSchema.pre('save', function(next) {
 adSchema.set('toJSON', { virtuals: true });
 adSchema.set('toObject', { virtuals: true });
 
-module.exports = mongoose.model('Ad', adSchema);
+const Ad = mongoose.model('Ad', adSchema);
+export default Ad;
