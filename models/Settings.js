@@ -92,7 +92,7 @@ const settingsSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Only one settings document should exist
-settingsSchema.index({ _id: 1 }, { unique: true });
+// Ensure only one settings document exists (singleton pattern)
+// Note: _id is already indexed by MongoDB, no need to add custom index
 
 export default mongoose.model('Settings', settingsSchema);
