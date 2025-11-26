@@ -68,6 +68,68 @@ const userSchema = new mongoose.Schema({
   avatar: {
     type: String,
     default: null
+  },
+  dob: {
+    type: String,
+    default: null
+  },
+  gender: {
+    type: String,
+    enum: ['Male', 'Female', 'Other', null],
+    default: null
+  },
+  addressLine1: {
+    type: String,
+    default: null
+  },
+  addressLine2: {
+    type: String,
+    default: null
+  },
+  city: {
+    type: String,
+    default: null
+  },
+  state: {
+    type: String,
+    default: null
+  },
+  pincode: {
+    type: String,
+    default: null
+  },
+  country: {
+    type: String,
+    default: 'India'
+  },
+  bankAccount: {
+    accountType: {
+      type: String,
+      enum: ['Savings', 'Current', null],
+      default: null
+    },
+    accountNumber: {
+      type: String,
+      default: null
+    },
+    ifsc: {
+      type: String,
+      default: null
+    },
+    bankName: {
+      type: String,
+      default: null
+    }
+  },
+  nominee: {
+    name: {
+      type: String,
+      default: null
+    },
+    relationship: {
+      type: String,
+      default: null
+    }
   }
 }, {
   timestamps: true

@@ -347,13 +347,62 @@ router.put('/change-password', protect, async (req, res, next) => {
 // @access  Private
 router.put('/profile', protect, async (req, res, next) => {
   try {
-    const { fullName, phone, avatar } = req.body;
+    const { 
+      username,
+      fullName, 
+      email,
+      phone, 
+      dob,
+      gender,
+      addressLine1,
+      addressLine2,
+      city,
+      state,
+      pincode,
+      country,
+      avatar,
+      accountType,
+      accountNumber,
+      ifsc,
+      bankName,
+      nomineeName,
+      nomineeRelationship
+    } = req.body;
 
     const user = await User.findById(req.user._id);
 
+    // Update basic fields
+    if (username) user.username = username;
     if (fullName) user.fullName = fullName;
+    if (email) user.email = email;
     if (phone) user.phone = phone;
+    if (dob) user.dob = dob;
+    if (gender) user.gender = gender;
     if (avatar) user.avatar = avatar;
+
+    // Update address fields
+    if (addressLine1 !== undefined) user.addressLine1 = addressLine1;
+    if (addressLine2 !== undefined) user.addressLine2 = addressLine2;
+    if (city !== undefined) user.city = city;
+    if (state !== undefined) user.state = state;
+    if (pincode !== undefined) user.pincode = pincode;
+    if (country !== undefined) user.country = country;
+
+    // Update bank account details
+    if (accountType || accountNumber || ifsc || bankName) {
+      if (!user.bankAccount) user.bankAccount = {};
+      if (accountType !== undefined) user.bankAccount.accountType = accountType;
+      if (accountNumber !== undefined) user.bankAccount.accountNumber = accountNumber;
+      if (ifsc !== undefined) user.bankAccount.ifsc = ifsc;
+      if (bankName !== undefined) user.bankAccount.bankName = bankName;
+    }
+
+    // Update nominee details
+    if (nomineeName || nomineeRelationship) {
+      if (!user.nominee) user.nominee = {};
+      if (nomineeName !== undefined) user.nominee.name = nomineeName;
+      if (nomineeRelationship !== undefined) user.nominee.relationship = nomineeRelationship;
+    }
 
     await user.save();
 
