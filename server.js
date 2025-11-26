@@ -24,6 +24,22 @@ import adsRoutes from './routes/ads.js';
 // Load environment variables
 dotenv.config();
 
+// Validate critical environment variables
+const requiredEnvVars = ['MONGODB_URI', 'JWT_SECRET'];
+const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+if (missingEnvVars.length > 0) {
+  console.error('❌ Missing required environment variables:', missingEnvVars.join(', '));
+  console.error('Please set these environment variables in your .env file or hosting platform');
+  process.exit(1);
+}
+
+// Validate JWT_SECRET length
+if (process.env.JWT_SECRET.length < 32) {
+  console.error('❌ JWT_SECRET must be at least 32 characters long for security');
+  process.exit(1);
+}
+
 const app = express();
 
 // Trust proxy - Required for Render.com reverse proxy
