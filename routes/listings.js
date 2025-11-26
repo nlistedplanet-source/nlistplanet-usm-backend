@@ -198,18 +198,33 @@ router.post('/', protect, async (req, res, next) => {
     }
 
     // Create listing
-    const listing = await Listing.create({
+    const listingData = {
       userId: req.user._id,
       username: req.user.username,
       type,
       companyId,
       companyName: company.CompanyName || company.name,
       companySegmentation: companySegmentation || null,
-      price,
+      price, // Keep original for backward compatibility
       quantity,
       minLot: minLot || 1,
       description
-    });
+    };
+
+    // Calculate platform fee fields
+    if (type === 'sell') {
+      // For SELL: Seller enters desired amount
+      listingData.sellerDesiredPrice = price;
+      listingData.displayPrice = price / 0.98; // Add 2% for buyer to pay
+      listingData.platformFee = listingData.displayPrice - price;
+    } else {
+      // For BUY: Buyer enters max budget
+      listingData.buyerMaxPrice = price;
+      listingData.displayPrice = price * 0.98; // Show 2% less to sellers
+      listingData.platformFee = price - listingData.displayPrice;
+    }
+
+    const listing = await Listing.create(listingData);
 
     // Update company listings count
     company.totalListings += 1;
@@ -260,11 +275,24 @@ router.post('/:id/bid', protect, async (req, res, next) => {
     const bidData = {
       userId: req.user._id,
       username: req.user.username,
-      price,
+      price, // Keep original
       quantity,
       message,
       counterHistory: []
     };
+
+    // Calculate platform fee fields
+    if (listing.type === 'sell') {
+      // Buyer is bidding - buyer enters amount they'll pay
+      bidData.buyerOfferedPrice = price;
+      bidData.sellerReceivesPrice = price * 0.98; // Seller gets 2% less
+      bidData.platformFee = price - bidData.sellerReceivesPrice;
+    } else {
+      // Seller is offering - seller enters amount they want to receive
+      bidData.sellerReceivesPrice = price;
+      bidData.buyerOfferedPrice = price / 0.98; // Buyer pays 2% more
+      bidData.platformFee = bidData.buyerOfferedPrice - price;
+    }
 
     if (listing.type === 'sell') {
       listing.bids.push(bidData);
@@ -381,6 +409,10 @@ router.put('/:listingId/bids/:bidId/accept', protect, async (req, res, next) => 
 
     // Update bid status
     bid.status = 'accepted';
+    
+    // Mark listing as sold/completed when bid is accepted
+    listing.status = 'sold';
+    
     await listing.save();
 
     // Create notification for bidder
@@ -583,19 +615,33 @@ router.put('/:listingId/bids/:bidId/counter', protect, async (req, res, next) =>
 
     // Add to counter history
     const round = (bid.counterHistory?.length || 0) + 1;
-    bid.counterHistory.push({
+    const counterData = {
       round,
       by: 'seller',
       price,
       quantity: quantity || bid.quantity,
       message: message || '',
       timestamp: new Date()
-    });
+    };
+    bid.counterHistory.push(counterData);
 
-    // Update bid status
+    // Update bid status and price
     bid.status = 'countered';
     bid.price = price;
     if (quantity) bid.quantity = quantity;
+
+    // Recalculate platform fee fields
+    if (listing.type === 'sell') {
+      // Seller is countering - seller enters desired amount
+      bid.sellerReceivesPrice = price;
+      bid.buyerOfferedPrice = price / 0.98; // Buyer pays 2% more
+      bid.platformFee = bid.buyerOfferedPrice - price;
+    } else {
+      // Seller is countering on BUY post - seller enters desired amount
+      bid.sellerReceivesPrice = price;
+      bid.buyerOfferedPrice = price / 0.98; // Buyer pays 2% more
+      bid.platformFee = bid.buyerOfferedPrice - price;
+    }
     
     await listing.save();
 
@@ -656,7 +702,19 @@ router.put('/:id', protect, async (req, res, next) => {
     }
 
     // Update fields
-    if (price !== undefined) listing.price = price;
+    if (price !== undefined) {
+      listing.price = price;
+      // Recalculate platform fee fields
+      if (listing.type === 'sell') {
+        listing.sellerDesiredPrice = price;
+        listing.displayPrice = price / 0.98;
+        listing.platformFee = listing.displayPrice - price;
+      } else {
+        listing.buyerMaxPrice = price;
+        listing.displayPrice = price * 0.98;
+        listing.platformFee = price - listing.displayPrice;
+      }
+    }
     if (quantity !== undefined) listing.quantity = quantity;
     if (minQuantity !== undefined) listing.minLot = minQuantity;
     

@@ -11,6 +11,23 @@ const bidSchema = new mongoose.Schema({
     type: Number,
     required: true
   },
+  // Platform fee fields
+  buyerOfferedPrice: {
+    type: Number,
+    default: function() { return this.price; }
+  },
+  sellerReceivesPrice: {
+    type: Number,
+    default: function() { return this.price * 0.98; }
+  },
+  platformFee: {
+    type: Number,
+    default: function() { return this.price * 0.02; }
+  },
+  platformFeePercentage: {
+    type: Number,
+    default: 2
+  },
   quantity: {
     type: Number,
     required: true
@@ -64,6 +81,29 @@ const listingSchema = new mongoose.Schema({
   price: {
     type: Number,
     required: true
+  },
+  // Platform fee fields
+  sellerDesiredPrice: {
+    type: Number,
+    default: function() { return this.type === 'sell' ? this.price : null; }
+  },
+  buyerMaxPrice: {
+    type: Number,
+    default: function() { return this.type === 'buy' ? this.price : null; }
+  },
+  displayPrice: {
+    type: Number,
+    default: function() { 
+      return this.type === 'sell' ? this.price / 0.98 : this.price * 0.98;
+    }
+  },
+  platformFeePercentage: {
+    type: Number,
+    default: 2
+  },
+  platformFee: {
+    type: Number,
+    default: function() { return this.price * 0.02; }
   },
   quantity: {
     type: Number,
