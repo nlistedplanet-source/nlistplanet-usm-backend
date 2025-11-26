@@ -50,7 +50,7 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      connectSrc: ["'self'"],
+      connectSrc: ["'self'", "*.vercel.app"],
       scriptSrc: ["'self'"],
       styleSrc: ["'self'"],
       imgSrc: ["'self'", 'data:', 'https:'],
@@ -62,7 +62,7 @@ app.use(helmet({
       upgradeInsecureRequests: []
     }
   },
-  crossOriginEmbedderPolicy: true,
+  crossOriginEmbedderPolicy: false, // Changed to false for compatibility
   crossOriginResourcePolicy: { policy: 'cross-origin' },
   referrerPolicy: { policy: 'no-referrer' },
   noSniff: true,
@@ -96,13 +96,38 @@ const helmetMiddleware = helmet.contentSecurityPolicy && helmet.contentSecurityP
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true); // Allow non-browser tools
-    if (allowedOrigins.has(origin)) return callback(null, true);
+    // Allow requests with no origin (mobile apps, curl, postman)
+    if (!origin) {
+      console.log('[CORS] Allowing request with no origin');
+      return callback(null, true);
+    }
+    
+    // Check if origin is in whitelist
+    if (allowedOrigins.has(origin)) {
+      console.log('[CORS] ✅ Allowed origin:', origin);
+      return callback(null, true);
+    }
+    
     // Allow all Vercel preview deployments
-    if (origin && origin.match(/\.vercel\.app$/)) return callback(null, true);
+    if (origin.match(/\.vercel\.app$/)) {
+      console.log('[CORS] ✅ Allowed Vercel preview:', origin);
+      return callback(null, true);
+    }
+    
+    // Allow localhost on any port for development
+    if (origin.match(/^https?:\/\/localhost(:\d+)?$/)) {
+      console.log('[CORS] ✅ Allowed localhost:', origin);
+      return callback(null, true);
+    }
+    
+    console.log('[CORS] ❌ Blocked origin:', origin);
     return callback(new Error('CORS: Origin not allowed'));
   },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 600 // 10 minutes
 }));
 
 // Preflight handler (only for whitelisted origins)
