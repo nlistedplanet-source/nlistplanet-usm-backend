@@ -8,6 +8,8 @@ import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import mongoSanitize from 'express-mongo-sanitize';
 import xss from 'xss-clean';
+import { detectInjectionAttempt } from './middleware/securityLogger.js';
+import { sanitizeInput } from './middleware/validation.js';
 
 // Import routes
 import authRoutes from './routes/auth.js';
@@ -151,6 +153,8 @@ app.use(express.urlencoded({ extended: true }));
 // Security hardening middleware
 app.use(mongoSanitize()); // Prevent NoSQL injection
 app.use(xss()); // Basic XSS protection (note: deprecated library, consider replacement later)
+app.use(detectInjectionAttempt); // Detect and log injection attempts
+app.use(sanitizeInput); // Additional input sanitization
 
 // Global rate limiter (all routes)
 const globalLimiter = rateLimit({

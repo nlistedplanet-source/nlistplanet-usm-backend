@@ -4,6 +4,8 @@ import User from '../models/User.js';
 import { protect } from '../middleware/auth.js';
 import rateLimit from 'express-rate-limit';
 import { body, validationResult } from 'express-validator';
+import { logFailedLogin, logSuccessfulLogin, logAccountChange } from '../middleware/securityLogger.js';
+import { validateProfileUpdate } from '../middleware/validation.js';
 
 const router = express.Router();
 
@@ -237,7 +239,7 @@ router.post(
     }).select('+password');
 
     if (!user) {
-      logAuthEvent('login_failed', username, 'user_not_found', ip, req.headers['user-agent']);
+      logFailedLogin(req, username, 'user_not_found');
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials'
@@ -246,7 +248,7 @@ router.post(
 
     // Check if banned
     if (user.isBanned) {
-      logAuthEvent('login_failed', username, 'account_banned', ip, req.headers['user-agent']);
+      logFailedLogin(req, username, 'account_banned');
       return res.status(403).json({
         success: false,
         message: 'Account suspended'
@@ -257,14 +259,14 @@ router.post(
     const isPasswordValid = await user.comparePassword(password);
 
     if (!isPasswordValid) {
-      logAuthEvent('login_failed', username, 'invalid_password', ip, req.headers['user-agent']);
+      logFailedLogin(req, username, 'invalid_password');
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials'
       });
     }
 
-    logAuthEvent('login_success', username, 'success', ip, req.headers['user-agent']);
+    logSuccessfulLogin(req, user._id, username);
 
     // Generate token
     const token = generateToken(user._id);
@@ -305,16 +307,20 @@ router.get('/me', protect, async (req, res, next) => {
 // @route   PUT /api/auth/change-password
 // @desc    Change user password
 // @access  Private
-router.put('/change-password', protect, async (req, res, next) => {
+router.put('/change-password', 
+  protect,
+  body('currentPassword').isString().isLength({ min: 1, max: 128 }).withMessage('Current password required'),
+  body('newPassword').isLength({ min: 5, max: 128 }).withMessage('New password must be 5-128 characters'),
+  (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, message: 'Invalid input format' });
+    }
+    next();
+  },
+  async (req, res, next) => {
   try {
     const { currentPassword, newPassword } = req.body;
-
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide current and new password'
-      });
-    }
 
     // Get user with password
     const user = await User.findById(req.user._id).select('+password');
@@ -323,6 +329,7 @@ router.put('/change-password', protect, async (req, res, next) => {
     const isPasswordValid = await user.comparePassword(currentPassword);
 
     if (!isPasswordValid) {
+      logFailedLogin(req, user.email, 'incorrect_current_password');
       return res.status(401).json({
         success: false,
         message: 'Current password is incorrect'
@@ -332,6 +339,8 @@ router.put('/change-password', protect, async (req, res, next) => {
     // Update password
     user.password = newPassword;
     await user.save();
+
+    logAccountChange(req, 'password_changed', { userId: user._id });
 
     res.json({
       success: true,
@@ -345,7 +354,7 @@ router.put('/change-password', protect, async (req, res, next) => {
 // @route   PUT /api/auth/profile
 // @desc    Update user profile
 // @access  Private
-router.put('/profile', protect, async (req, res, next) => {
+router.put('/profile', protect, validateProfileUpdate, async (req, res, next) => {
   try {
     const { 
       username,
@@ -370,6 +379,12 @@ router.put('/profile', protect, async (req, res, next) => {
     } = req.body;
 
     const user = await User.findById(req.user._id);
+
+    // Log profile update
+    const changedFields = [];
+    if (username && username !== user.username) changedFields.push('username');
+    if (email && email !== user.email) changedFields.push('email');
+    if (phone && phone !== user.phone) changedFields.push('phone');
 
     // Update basic fields
     if (username) user.username = username;
@@ -405,6 +420,14 @@ router.put('/profile', protect, async (req, res, next) => {
     }
 
     await user.save();
+
+    // Log profile changes
+    if (changedFields.length > 0) {
+      logAccountChange(req, 'profile_updated', { 
+        userId: user._id, 
+        changedFields 
+      });
+    }
 
     res.json({
       success: true,

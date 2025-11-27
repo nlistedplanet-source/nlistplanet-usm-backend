@@ -6,6 +6,13 @@ import ReferralTracking from '../models/ReferralTracking.js';
 import Settings from '../models/Settings.js';
 import User from '../models/User.js';
 import { protect, optionalAuth } from '../middleware/auth.js';
+import { 
+  validateListing, 
+  validateBid, 
+  validateBidAction, 
+  validateCounterOffer, 
+  validateObjectId 
+} from '../middleware/validation.js';
 
 const router = express.Router();
 
