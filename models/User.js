@@ -130,7 +130,17 @@ const userSchema = new mongoose.Schema({
       type: String,
       default: null
     }
-  }
+  },
+  previousUsernames: [{
+    username: {
+      type: String,
+      required: true
+    },
+    changedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }]
 }, {
   timestamps: true
 });

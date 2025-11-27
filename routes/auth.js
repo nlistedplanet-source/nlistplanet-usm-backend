@@ -1,6 +1,7 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import UsernameHistory from '../models/UsernameHistory.js';
 import { protect } from '../middleware/auth.js';
 import rateLimit from 'express-rate-limit';
 import { body, validationResult } from 'express-validator';
@@ -182,6 +183,13 @@ router.post(
       fullName,
       phone,
       referredBy: referrer ? referrer.username : null
+    });
+
+    // Save initial username to history to prevent future reassignment
+    await UsernameHistory.create({
+      username: username.toLowerCase(),
+      userId: user._id,
+      reason: 'Initial registration'
     });
 
     // Update referrer stats if exists
@@ -385,6 +393,36 @@ router.put('/profile', protect, validateProfileUpdate, async (req, res, next) =>
     if (username && username !== user.username) changedFields.push('username');
     if (email && email !== user.email) changedFields.push('email');
     if (phone && phone !== user.phone) changedFields.push('phone');
+
+    // Handle username change with history tracking
+    if (username && username !== user.username) {
+      const oldUsername = user.username;
+      
+      // Check if new username is in history (was used by any user before)
+      const existingHistory = await UsernameHistory.findOne({ username: username.toLowerCase() });
+      if (existingHistory) {
+        return res.status(400).json({
+          success: false,
+          message: 'This username was previously used and cannot be assigned to another user'
+        });
+      }
+
+      // Save old username to history
+      await UsernameHistory.create({
+        username: oldUsername.toLowerCase(),
+        userId: user._id,
+        reason: 'User changed username'
+      });
+
+      // Add to user's previous usernames array
+      if (!user.previousUsernames) {
+        user.previousUsernames = [];
+      }
+      user.previousUsernames.push({
+        username: oldUsername,
+        changedAt: new Date()
+      });
+    }
 
     // Update basic fields
     if (username) user.username = username;

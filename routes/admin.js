@@ -7,6 +7,7 @@ import Company from '../models/Company.js';
 import Settings from '../models/Settings.js';
 import Ad from '../models/Ad.js';
 import ReferralTracking from '../models/ReferralTracking.js';
+import UsernameHistory from '../models/UsernameHistory.js';
 import { protect, authorize } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -1147,6 +1148,82 @@ router.put('/referrals/:id', async (req, res, next) => {
       success: true,
       message: 'Referral updated successfully',
       data: referral
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   GET /api/admin/username-history/:userId
+// @desc    Get username change history for a specific user
+// @access  Admin
+router.get('/username-history/:userId', async (req, res, next) => {
+  try {
+    const user = await User.findById(req.params.userId).select('username previousUsernames email');
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Get all username history from UsernameHistory collection
+    const history = await UsernameHistory.find({ userId: user._id })
+      .sort({ changedAt: -1 });
+
+    res.json({
+      success: true,
+      data: {
+        currentUsername: user.username,
+        email: user.email,
+        previousUsernames: user.previousUsernames || [],
+        fullHistory: history
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   GET /api/admin/check-username/:username
+// @desc    Check if username was ever used before
+// @access  Admin
+router.get('/check-username/:username', async (req, res, next) => {
+  try {
+    const username = req.params.username.toLowerCase();
+    
+    // Check current users
+    const currentUser = await User.findOne({ username }).select('username email createdAt');
+    
+    // Check username history
+    const history = await UsernameHistory.findOne({ username })
+      .populate('userId', 'username email');
+
+    if (!currentUser && !history) {
+      return res.json({
+        success: true,
+        available: true,
+        message: 'Username is available and has never been used'
+      });
+    }
+
+    res.json({
+      success: true,
+      available: false,
+      data: {
+        currentlyUsedBy: currentUser ? {
+          username: currentUser.username,
+          email: currentUser.email,
+          createdAt: currentUser.createdAt
+        } : null,
+        previouslyUsedBy: history ? {
+          username: history.userId.username,
+          email: history.userId.email,
+          changedAt: history.changedAt,
+          reason: history.reason
+        } : null
+      }
     });
   } catch (error) {
     next(error);
