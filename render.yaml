@@ -6,7 +6,7 @@ services:
     plan: free
     branch: main
     autoDeploy: true
-    rootDir: .
+    rootDir: UnlistedHub-USM/backend
     buildCommand: npm ci --only=production --ignore-scripts
     startCommand: node server-fast.js
     healthCheckPath: /api/health
