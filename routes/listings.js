@@ -770,21 +770,28 @@ router.delete('/:id', protect, async (req, res, next) => {
       });
     }
 
-    // Send notifications to all bidders/offers
+    // Send notifications to all bidders/offers (remove duplicates)
     const bidUsers = [...(listing.bids || []), ...(listing.offers || [])].map(b => b.userId);
-    if (bidUsers.length > 0) {
-      await Notification.insertMany(
-        bidUsers.map(userId => ({
-          userId,
-          type: 'listing_cancelled',
-          title: 'Listing Cancelled',
-          message: `The listing for ${listing.companyName} has been cancelled by the seller.`,
-          data: {
-            listingId: listing._id,
-            companyName: listing.companyName
-          }
-        }))
-      );
+    const uniqueBidUsers = [...new Set(bidUsers.map(id => id.toString()))];
+    
+    if (uniqueBidUsers.length > 0) {
+      try {
+        await Notification.insertMany(
+          uniqueBidUsers.map(userId => ({
+            userId,
+            type: 'listing_cancelled',
+            title: 'Listing Cancelled',
+            message: `The listing for ${listing.companyName} has been cancelled by the seller.`,
+            data: {
+              listingId: listing._id,
+              companyName: listing.companyName
+            }
+          }))
+        );
+      } catch (notifError) {
+        // Log notification error but don't fail the delete
+        console.error('Failed to send notifications:', notifError);
+      }
     }
 
     // Delete the listing
