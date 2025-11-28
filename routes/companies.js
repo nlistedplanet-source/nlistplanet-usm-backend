@@ -15,6 +15,9 @@ router.get('/', async (req, res, next) => {
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
+        { CompanyName: { $regex: search, $options: 'i' } },
+        { scriptName: { $regex: search, $options: 'i' } },
+        { ScripName: { $regex: search, $options: 'i' } },
         { sector: { $regex: search, $options: 'i' } }
       ];
     }
